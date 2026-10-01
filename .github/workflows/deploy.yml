@@ -42,3 +42,12 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  verify:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the published game
+        run: |
+          curl --fail --location --silent --show-error --retry 8 --retry-delay 10 --retry-all-errors --max-time 20 --output "$RUNNER_TEMP/pages-index.html" https://lucypigr.github.io/heartstone-for-gpt/
+          rg --quiet '<div id="root"></div>' "$RUNNER_TEMP/pages-index.html"
