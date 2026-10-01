@@ -1,10 +1,9 @@
 # 自動部署到 GitHub Pages
-# 第一次使用前：到 Settings → Pages，把 Source 設為「GitHub Actions」
 name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main, claude/hearthstone-card-game-40zvs7]
+    branches: [main, import-claude-project]
   workflow_dispatch:
 
 permissions:
@@ -28,6 +27,7 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+      - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
