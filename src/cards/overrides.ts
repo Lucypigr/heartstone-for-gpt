@@ -32,6 +32,19 @@ const dieAtEndOfTurn: Ability = { on: { k: 'turnEnd', whose: 'mine' }, effects: 
 const PLAGUES = ['TTN_450t', 'TTN_450t2', 'TTN_450t3'];
 
 export const OVERRIDES: Record<string, Override> = {
+  // 紫羅蘭堡最後特殊卡：組牌規則／Rulebreaker
+  CAP_405: { abilities: play(fn('godfatherKazakus')) },
+  JAIL_397: { keywords: ['TAUNT'], startOfGame: [fn('beatrixStart')] },
+  JAIL_504: {
+    abilities: play(fn('ayaCounterfeit')),
+    tokens: ['JAIL_504t', 'JAIL_504t2', 'JAIL_504t3', 'JAIL_504t3p'],
+  },
+  JAIL_504t: { abilities: play({ e: 'mana', kind: 'temp', amount: 1 }, { e: 'summonJade' }) },
+  JAIL_504t2: { abilities: play({ e: 'mana', kind: 'temp', amount: 1 }, fn('grimyCoin')) },
+  JAIL_504t3: { abilities: play({ e: 'mana', kind: 'temp', amount: 1 }, fn('kabalCoinPotion')) },
+  JAIL_504t3p: { abilities: play(fn('randomKazakusPotion1')) },
+  JAIL_831: { abilities: play(fn('kingUnderbelly')) },
+
   // 紫羅蘭堡最後特殊卡：對戰內規則
   JAIL_430: {
     startOfGame: [fn('azalinaStart')],
