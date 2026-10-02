@@ -382,6 +382,8 @@ export interface HeroPowerDef extends HeroPowerSpec {
   name: string;
   text: string;
   cost: number;
+  /** 預設使用法力；部分特殊英雄能力改用屍體 */
+  costKind?: 'mana' | 'corpses';
 }
 
 /** 死亡騎士符文：一副套牌中三種符文各取最高需求，加總最多 3 個 */
@@ -428,6 +430,8 @@ export interface CardDef {
   /** 英雄卡：獲得的護甲與新的英雄能力 */
   armor?: number;
   heroPower?: HeroPowerDef;
+  /** 戰吼等效果額外解鎖的第二英雄能力 */
+  secondaryHeroPower?: HeroPowerDef;
   /** 由 overrides / custom 加入的卡 */
   custom?: boolean;
   /** 星艦組件：打出或召喚時組裝進你的星艦 */
