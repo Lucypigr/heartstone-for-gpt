@@ -1519,6 +1519,17 @@ export function parseCardText(input: ParseInput, env: ParseEnv): ParsedCard {
       current = null;
       continue;
     }
+    // 已腐化衍生卡常寫成「Corrupted Rush, Divine Shield」，
+    // 必須先移除純顯示標記，才能讓後面的關鍵字迴圈解析。
+    const leadingCorrupted = /^Corrupted(?:[:.]? |$)/.exec(raw);
+    if (leadingCorrupted) {
+      raw = raw.slice(leadingCorrupted[0].length).trim();
+      if (!raw) {
+        current = null;
+        continue;
+      }
+    }
+
     // 句首的關鍵字（如「嘲諷 戰吼：…」）
     for (;;) {
       const kl = new RegExp(`^(${KEYWORD_RE}|Tradeable|Echo|Twinspell)(?:,? |$)`).exec(raw);
@@ -1537,6 +1548,17 @@ export function parseCardText(input: ParseInput, env: ParseEnv): ParsedCard {
       raw = raw.slice(sp[0].length);
     }
     if (!raw) continue;
+
+    // 官方的已腐化衍生卡會以「Corrupted」作為純顯示標記，不是實際效果。
+    // 可能單獨成句，也可能直接接在 Battlecry / 關鍵字前。
+    const corrupted = /^Corrupted(?:[:.]? |$)/.exec(raw);
+    if (corrupted) {
+      raw = raw.slice(corrupted[0].length).trim();
+      if (!raw) {
+        current = null;
+        continue;
+      }
+    }
 
     if (/^Choose One/.test(raw)) fail('Choose One 由子卡處理');
 

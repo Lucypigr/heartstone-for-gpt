@@ -84,7 +84,6 @@ const UNSUPPORTED_TAGS = [
   'SIDE_QUEST',
   'QUESTLINE',
   'MAGNETIC',
-  'CORRUPT',
   'DORMANT',
   'INFUSE',
   'FORGE',
@@ -136,6 +135,28 @@ async function main() {
 
   const typeOf = (r: RawCard) => TYPE_MAP[r.tags.CARDTYPE];
   const hasKw = (r: RawCard, k: Keyword) => KEYWORD_TAGS.some(([tag, kw]) => kw === k && r.tags[tag]);
+
+  /** 找官方已腐化版本。優先同 ID 前綴；多階段腐化優先選仍帶 CORRUPT 的中間階段。 */
+  const corruptTargetOf = (r: RawCard): RawCard | null => {
+    const name = r.strs.CARDNAME?.enUS?.toLowerCase();
+    if (!name) return null;
+    const cands = (byName.get(name) ?? []).filter(
+      (x) =>
+        x.id !== r.id &&
+        !x.tags.COLLECTIBLE &&
+        !!x.tags.CORRUPTED_CARD &&
+        x.tags.CARD_SET === r.tags.CARD_SET &&
+        !!typeOf(x) &&
+        x.id.startsWith(r.id),
+    );
+    cands.sort(
+      (a, b) =>
+        (b.tags.CORRUPT ?? 0) - (a.tags.CORRUPT ?? 0) ||
+        a.id.length - b.id.length ||
+        a.dbf - b.dbf,
+    );
+    return cands[0] ?? null;
+  };
 
   // ------------------------------------------------------------------ 衍生卡
   const tokenDefs = new Map<string, CardDef | null>();
@@ -235,6 +256,23 @@ async function main() {
       cost: r.tags.COST ?? 0,
       collectible,
     };
+    if (r.tags.CORRUPT) {
+      const target = corruptTargetOf(r);
+      if (target) {
+        if (!buildToken(target.id)) {
+          if (collectible) failures.push({ id: r.id, name: r.strs.CARDNAME.enUS, set: r.tags.CARD_SET, reason: `腐化版本 ${target.id} 不支援` });
+          return null;
+        }
+        def.corruptInto = target.id;
+      } else if (r.tags.CORRUPTED_CARD && /endlessly/i.test(r.strs.CARDTEXT?.enUS ?? '')) {
+        // 駭人生長體：第一階段會變形成官方 t 版本，之後每次腐化都再 +1/+1。
+        def.corruptRepeatBuff = { atk: 1, hp: 1 };
+      } else {
+        if (collectible) failures.push({ id: r.id, name: r.strs.CARDNAME.enUS, set: r.tags.CARD_SET, reason: '找不到已腐化版本' });
+        return null;
+      }
+    }
+
     const flavor = clean(r.strs.FLAVORTEXT?.zhTW);
     if (flavor && collectible) def.flavor = flavor;
     if (type === 'MINION' || type === 'WEAPON') {
@@ -329,7 +367,9 @@ async function main() {
         // 二選一手下本身的關鍵字仍依標籤
         for (const [tag, kw] of KEYWORD_TAGS) if (r.tags[tag]) parsed.keywords.push(kw);
       } else {
-        parsed = parseCardText({ textEn: r.strs.CARDTEXT?.enUS ?? '', cardType: type }, makeEnv(r.id));
+        const rawText = r.strs.CARDTEXT?.enUS ?? '';
+        const stageText = r.tags.CORRUPT ? rawText.replace(/<b>Corrupt(?: Again)?:<\/b>[\s\S]*$/i, '').trim() : rawText;
+        parsed = parseCardText({ textEn: stageText, cardType: type }, makeEnv(r.id));
       }
     } catch (e) {
       if (e instanceof Unsupported) {

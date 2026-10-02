@@ -64,6 +64,12 @@ describe('卡牌敘述解析', () => {
     expect(st.abilities[0].effects[0]).toMatchObject({ e: 'buff', keywords: ['STEALTH'], untilNextTurn: true });
   });
 
+  it('已腐化版本的 Corrupted 顯示標記不會被當成效果', () => {
+    const r = parse('<b>Corrupted</b>\n<b>Battlecry:</b> Draw a card.');
+    expect(r.abilities[0].on).toEqual({ k: 'play' });
+    expect(r.abilities[0].effects[0]).toMatchObject({ e: 'draw', count: 1, who: 'self' });
+  });
+
   it('榮譽擊殺會解析成獨立的精準致死觸發', () => {
     const r = parse('<b>Honorable Kill:</b> Gain +2 Attack.');
     expect(r.abilities[0].on).toEqual({ k: 'honorableKill' });

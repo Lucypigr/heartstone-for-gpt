@@ -438,6 +438,10 @@ export interface CardDef {
   terran?: boolean;
   /** 發射過星艦後，手牌與牌堆中的這張卡會變形成另一張卡 */
   launchTransform?: string;
+  /** 腐化：在手牌中打出更高目前費用的卡後，變形成官方已腐化版本 */
+  corruptInto?: string;
+  /** 可無限再次腐化：每次腐化保留卡牌並增加手牌數值 */
+  corruptRepeatBuff?: { atk: number; hp: number };
   /** 雙生法術：施放後加入手牌的複製（沒有雙生法術） */
   twinspellCopy?: string;
   /** 死亡騎士的符文需求（血魄 / 冰霜 / 穢邪） */
