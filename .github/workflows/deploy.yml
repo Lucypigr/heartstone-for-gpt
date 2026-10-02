@@ -51,3 +51,4 @@ jobs:
         run: |
           curl --fail --location --silent --show-error --retry 8 --retry-delay 10 --retry-all-errors --max-time 20 --output "$RUNNER_TEMP/pages-index.html" https://lucypigr.github.io/heartstone-for-gpt/
           grep -Fq '<div id="root"></div>' "$RUNNER_TEMP/pages-index.html"
+          grep -Fq '<title>爐石戰記 for GPT</title>' "$RUNNER_TEMP/pages-index.html"
