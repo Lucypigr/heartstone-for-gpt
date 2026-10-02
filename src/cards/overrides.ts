@@ -288,6 +288,35 @@ export const OVERRIDES: Record<string, Override> = {
   },
   JAIL_997: { target: chosenMinion, abilities: play(fn('demonicConfinement')) },
 
+  // 紫羅蘭堡：牌庫／手牌來源、英雄攻擊與 Blight 套件
+  CAP_407: { abilities: play(fn('wantedPoster')) },
+  JAIL_200: { abilities: play(fn('infestScullery')) },
+  JAIL_205: { abilities: [{ on: { k: 'turnEnd', whose: 'mine' }, effects: [fn('ratBurglar')] }] },
+  JAIL_380: { abilities: dr(fn('drawGeneratedSpell')) },
+
+  JAIL_399: { keywords: ['TAUNT'], abilities: dr(fn('impGangStooge')), tokens: ['JAIL_399t1'] },
+  JAIL_399t1: { keywords: ['TAUNT', 'LIFESTEAL'] },
+  JAIL_421: { keywords: ['CHARGE'] },
+
+  JAIL_432: { abilities: play(fn('mindSweeper')) },
+  JAIL_433: { target: chosenMinion, abilities: play({ e: 'destroy', target: { t: 'chosen' } }) },
+  JAIL_434: { abilities: dr(fn('discountCopiedOpponent')) },
+  JAIL_435: { prepare: true, abilities: play(fn('rampagingHound')) },
+
+  JAIL_442: {
+    disguised: true,
+    abilities: dr({ e: 'shuffle', card: 'JAIL_443t', count: 4 }),
+    tokens: ['JAIL_443t'],
+  },
+  JAIL_443: { keywords: ['CHARGE'], tokens: ['JAIL_443t'] },
+  JAIL_443t: {
+    castsWhenDrawn: true,
+    abilities: play({ e: 'damage', target: { t: 'hero', side: 'friendly' }, amount: 2 }),
+  },
+
+  JAIL_703: { abilities: dr(fn('enableSorry')) },
+  JAIL_890: { prepare: true, keywords: ['TAUNT'] },
+
   // 動物夥伴：隨機召喚米莎、雷歐克或霍弗
   NEW1_031: {
     abilities: [{ on: { k: 'play' }, effects: [{ e: 'custom', fn: 'summonOneOf', args: { cards: ['NEW1_032', 'NEW1_033', 'NEW1_034'] } }] }],
