@@ -50,6 +50,10 @@ export const OVERRIDES: Record<string, Override> = {
       effects: [{ e: 'buff', target: { t: 'chosen' }, atk: 3 }],
     },
   },
+  // 伊莉妲‧逐罪者：現行 36.2.2 規則。把牌庫送入虛無但保留 1 張；之後每個自己的回合開始額外從虛無取得 2 張。
+  JAIL_719: {
+    abilities: play(fn('sendDeckToVoidExceptOne')),
+  },
   // 動物夥伴：隨機召喚米莎、雷歐克或霍弗
   NEW1_031: {
     abilities: [{ on: { k: 'play' }, effects: [{ e: 'custom', fn: 'summonOneOf', args: { cards: ['NEW1_032', 'NEW1_033', 'NEW1_034'] } }] }],
