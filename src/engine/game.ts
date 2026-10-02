@@ -3383,7 +3383,7 @@ export class Game {
       case 'grantSpellEchoSummon': {
         (me.eternal ??= []).push({
           sourceCardId: ctx.sourceCardId,
-          ability: { on: { k: 'spellCast', side: 'friendly' }, effects: [fn('summonMinionAtSpellCost')] } as Ability,
+          ability: { on: { k: 'spellCast', side: 'friendly' }, effects: [{ e: 'custom', fn: 'summonMinionAtSpellCost' }] } as Ability,
         });
         break;
       }
