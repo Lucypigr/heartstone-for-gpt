@@ -406,6 +406,19 @@ function DeckEditor({
   const runeSlots = RUNE_KINDS.flatMap((k) => Array<keyof typeof runes>(runes[k]).fill(k));
   const showRunes = deck.heroClass === 'DEATHKNIGHT' || runeSlots.length > 0;
   const maxCurve = Math.max(1, ...curve);
+  const beatrixOptions = useMemo(
+    () => COLLECTIBLE.filter((c) => c.type === 'MINION' && c.cost === 2 && cardAllowed(c, 'PALADIN', false) && !deck.cards.includes(c.id)),
+    [deck.cards],
+  );
+  const underbellyOptions = useMemo(
+    () => COLLECTIBLE.filter((c) => {
+      const cls = cardClasses(c);
+      return c.type === 'MINION' && !!(c.races?.includes('BEAST') || c.races?.includes('ALL')) && !cls.includes('HUNTER') && !cls.includes('NEUTRAL');
+    }),
+    [],
+  );
+  const setSideboard = (key: string, picks: string[]) =>
+    onChange({ ...deck, sideboards: { ...(deck.sideboards ?? {}), [key]: picks.filter(Boolean) } });
 
   const autoFill = () => {
     const remaining = { ...collection };
@@ -465,6 +478,38 @@ function DeckEditor({
       <div className={`deck-count ${deck.cards.length === DECK_SIZE ? 'full' : ''}`}>
         {deck.cards.length} / {DECK_SIZE}
       </div>
+      {deck.cards.includes('JAIL_397') && (
+        <div className="problems" style={{ padding: 10 }}>
+          <b>Commander Beatrix 副牌</b>
+          <div className="muted small">選 1 張聖騎士或中立 2 費手下；開局加入 10 張複製。</div>
+          <select value={deck.sideboards?.JAIL_397?.[0] ?? ''} onChange={(e) => setSideboard('JAIL_397', e.target.value ? [e.target.value] : [])}>
+            <option value="">選擇 2 費手下</option>
+            {beatrixOptions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+      )}
+      {deck.cards.includes('JAIL_831') && (
+        <div className="problems" style={{ padding: 10 }}>
+          <b>King of the Underbelly 違禁野獸</b>
+          <div className="muted small">選 3 張不同的非獵人、非中立職業野獸。</div>
+          {[0, 1, 2].map((slot) => (
+            <select
+              key={slot}
+              value={deck.sideboards?.JAIL_831?.[slot] ?? ''}
+              onChange={(e) => {
+                const picks = [...(deck.sideboards?.JAIL_831 ?? ['', '', ''])];
+                picks[slot] = e.target.value;
+                setSideboard('JAIL_831', picks);
+              }}
+            >
+              <option value="">選擇違禁野獸 {slot + 1}</option>
+              {underbellyOptions
+                .filter((c) => c.id === deck.sideboards?.JAIL_831?.[slot] || !(deck.sideboards?.JAIL_831 ?? []).includes(c.id))
+                .map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          ))}
+        </div>
+      )}
       <ul className="deck-cards">
         {grouped.map(({ def, n }) => (
           <li
