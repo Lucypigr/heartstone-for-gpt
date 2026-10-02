@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseCardText, Unsupported, type ParseEnv } from './parser';
+import { parseCardText, parsePool, Unsupported, type ParseEnv } from './parser';
 import type { CardType } from '../engine/types';
 
 const env: ParseEnv = { findToken: (q) => `TOKEN:${q.name}:${q.atk ?? ''}/${q.hp ?? ''}` };
