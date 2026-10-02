@@ -98,9 +98,7 @@ const UNSUPPORTED_TAGS = [
   'OVERHEAL',
   'HERALD',
   'OBJECTIVE',
-  'START_OF_GAME_KEYWORD',
   'IMBUE',
-  'DISGUISED',
   'KINDRED',
   'REWIND',
   'EMPOWER',
@@ -254,6 +252,7 @@ async function main() {
       cost: r.tags.COST ?? 0,
       collectible,
     };
+    if (r.tags.DISGUISED) def.disguised = true;
     if (r.tags.SHATTER) {
       const parts = raws
         .filter((x) => x.id !== r.id && x.id.startsWith(r.id) && !!x.tags.SHATTERED && typeOf(x) === type)
@@ -394,6 +393,10 @@ async function main() {
         if (def.prepare) {
           // 先正規化再移除，避免 CardDefs 的粗體、換行、逗點等標記差異。
           stageText = normalizeText(stageText).replace(/^Prepare(?:[,:.]\s*|\s+)/i, '').trim();
+        }
+        if (def.disguised) {
+          // 「Can be played on either side」是手下放置規則，不是戰吼效果。
+          stageText = normalizeText(stageText).replace(/^Can be played on either side(?:\.|,)?\s*/i, '').trim();
         }
         if (r.tags.SHATTER || r.tags.SHATTERED) {
           // Shatter / Shattered 描述的是手牌形態，不是施放效果。
