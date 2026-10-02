@@ -160,7 +160,6 @@ export const OVERRIDES: Record<string, Override> = {
       cost: 0,
       passive: true,
     },
-    tokens: ['JAIL_800hp1', 'JAIL_800hp2'],
   },
   JAIL_802: {
     abilities: [{ on: { k: 'cardPlayed', side: 'friendly', cardType: 'MINION', hasBattlecry: true }, effects: [{ e: 'buff', target: { t: 'it' }, atk: 1, hp: 1 }] }],
