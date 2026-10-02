@@ -909,6 +909,15 @@ export class Game {
     const hc = p.hand[idx];
     const def = this.handDef(hc);
     const cost = this.costOf(p, hc);
+    // 只有「打出這張卡之前就已經在手牌」的腐化卡能被本次出牌腐化。
+    // 先記 UID，真正比較費用時會在本次一次性折扣被消耗後重新計算它們的目前費用。
+    const corruptibleUids = p.hand
+      .filter((h) => h.uid !== handUid)
+      .filter((h) => {
+        const d = this.handDef(h);
+        return !!d.corruptInto || !!d.corruptRepeatBuff;
+      })
+      .map((h) => h.uid);
     const outcast = idx === 0 || idx === p.hand.length - 1;
     const combo = p.cardsPlayedThisTurn > 0;
     const echo = this.hasEcho(p.id, hc);
@@ -926,6 +935,7 @@ export class Game {
     p.cardsPlayedThisTurn++;
     p.nextCardDiscount = 0;
     if (def.overload) p.overloadOwed += def.overload;
+    this.corruptHand(p, corruptibleUids, cost);
 
     let abilities: Ability[] = def.abilities ?? [];
     let transformInto: string | undefined;
@@ -1011,6 +1021,28 @@ export class Game {
       yield* this.emit({ k: 'cardPlayed', player: p.id, cardType: 'WEAPON', cardId: def.id, echo });
     }
     if (this.powerDef(p).refresh === 'cardPlayed') p.heroPower.used = false;
+  }
+
+  /** 腐化手牌：比較雙方「目前費用」，並保留原手牌卡的費用/數值增益。 */
+  private corruptHand(p: PlayerState, candidates: number[], playedCost: number) {
+    for (const uid of candidates) {
+      const hc = p.hand.find((h) => h.uid === uid);
+      if (!hc) continue;
+      const def = this.handDef(hc);
+      if (!def.corruptInto && !def.corruptRepeatBuff) continue;
+      const currentCost = this.costOf(p, hc);
+      if (playedCost <= currentCost) continue;
+
+      if (def.corruptInto) {
+        const oldName = def.name;
+        hc.cardId = def.corruptInto;
+        this.log(p.id, `${oldName}已腐化`);
+      } else if (def.corruptRepeatBuff) {
+        hc.atkBuff += def.corruptRepeatBuff.atk;
+        hc.hpBuff += def.corruptRepeatBuff.hp;
+        this.log(p.id, `${def.name}再次腐化，獲得 +${def.corruptRepeatBuff.atk}/+${def.corruptRepeatBuff.hp}`);
+      }
+    }
   }
 
   private *trade(handUid: number): Gen {
