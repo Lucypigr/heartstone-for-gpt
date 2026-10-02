@@ -922,7 +922,7 @@ textarea {
   border-color: #48ff6e;
 }
 
-.my-board.placing {
+.board.placing {
   cursor: copy;
 }
 
