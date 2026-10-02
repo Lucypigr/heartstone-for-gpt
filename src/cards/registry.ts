@@ -75,6 +75,7 @@ export function poolCards(pool: Pool, ownClass: CardClass, oppClass: CardClass):
     if (pool.type && c.type !== pool.type) return false;
     if (pool.race && !(c.races?.includes(pool.race) || c.races?.includes('ALL'))) return false;
     if (pool.cost !== undefined && c.cost !== pool.cost) return false;
+    if (pool.minCost !== undefined && c.cost < pool.minCost) return false;
     if (pool.maxCost !== undefined && c.cost > pool.maxCost) return false;
     if (pool.rarity && c.rarity !== pool.rarity) return false;
     if (pool.keyword && !c.keywords?.includes(pool.keyword)) return false;
