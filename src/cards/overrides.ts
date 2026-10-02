@@ -105,6 +105,38 @@ export const OVERRIDES: Record<string, Override> = {
       { e: 'cond', cond: { c: 'spellsThisTurnAtLeast', n: 3 }, then: [{ e: 'summonRandom', pool: { type: 'MINION', cost: 8 }, count: 1, who: 'self' }] },
     ),
   },
+  // 紫羅蘭堡薩滿：施放 3 個法術後，手牌中的法術變形成同費元素手下。
+  JAIL_801: {
+    target: anyChar,
+    abilities: play({ e: 'damage', target: { t: 'chosen' }, amount: 4, spell: true }),
+    handTransformAfterSpells: { count: 3, into: 'JAIL_801t' },
+    tokens: ['JAIL_801t'],
+  },
+  JAIL_801t: {
+    target: anyChar,
+    abilities: play({ e: 'damage', target: { t: 'chosen' }, amount: 4 }),
+  },
+  JAIL_803: {
+    target: { filter: { type: 'character', side: 'enemy' } },
+    abilities: play({ e: 'freeze', target: { t: 'chosen' } }, { e: 'draw', count: 2, who: 'self' }),
+    handTransformAfterSpells: { count: 3, into: 'JAIL_803t' },
+    tokens: ['JAIL_803t'],
+  },
+  JAIL_803t: {
+    target: { filter: { type: 'character', side: 'enemy' } },
+    abilities: play({ e: 'freeze', target: { t: 'chosen' } }, { e: 'draw', count: 2, who: 'self' }),
+  },
+  JAIL_805: {
+    keywords: ['LIFESTEAL'],
+    abilities: play({ e: 'damage', target: { t: 'all', filter: { type: 'minion', side: 'enemy' } }, amount: 2, spell: true }),
+    handTransformAfterSpells: { count: 3, into: 'JAIL_805t' },
+    tokens: ['JAIL_805t'],
+  },
+  JAIL_805t: {
+    keywords: ['LIFESTEAL'],
+    abilities: play({ e: 'damage', target: { t: 'all', filter: { type: 'minion', side: 'enemy' } }, amount: 2 }),
+  },
+
   JAIL_802: {
     abilities: [{ on: { k: 'cardPlayed', side: 'friendly', cardType: 'MINION', hasBattlecry: true }, effects: [{ e: 'buff', target: { t: 'it' }, atk: 1, hp: 1 }] }],
   },
