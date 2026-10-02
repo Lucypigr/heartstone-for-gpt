@@ -238,10 +238,12 @@ export class Game {
         summonedRaces: {},
         ai: o.ai[id],
       };
-      shuffle(s, s.players[id].deck);
     }
     s.first = o.first ?? (nextRandom(s) < 0.5 ? 0 : 1);
     s.current = s.first;
+    // 開局效果必須在起手抽牌前執行；霍格等效果可修改牌庫內容。
+    game.runStartOfGame();
+    for (const id of [0, 1] as PlayerId[]) shuffle(s, s.players[id].deck);
     const second = opp(s.first);
     for (let i = 0; i < 3; i++) game.drawRaw(s.players[s.first]);
     for (let i = 0; i < 4; i++) game.drawRaw(s.players[second]);
@@ -802,6 +804,26 @@ export class Game {
   // ==========================================================================
   // 起手換牌與回合
   // ==========================================================================
+
+  /** 執行雙方牌庫中的開局效果。普通效果先執行；startOfGameLast 最後執行。 */
+  private runStartOfGame() {
+    const pending: { player: PlayerId; cardId: string; effects: Effect[]; last: boolean }[] = [];
+    for (const pid of [0, 1] as PlayerId[]) {
+      // 固定快照，避免開局效果新增的卡又在同一輪重複觸發。
+      for (const hc of [...this.s.players[pid].deck]) {
+        const def = getCard(hc.cardId);
+        if (!def.startOfGame?.length) continue;
+        pending.push({ player: pid, cardId: def.id, effects: def.startOfGame, last: !!def.startOfGameLast });
+      }
+    }
+    pending.sort((a, b) => Number(a.last) - Number(b.last));
+    for (const item of pending) {
+      this.steps = 0;
+      const ctx: Ctx = { ...this.baseCtx(item.player), sourceCardId: item.cardId };
+      this.log(item.player, `${this.name(item.cardId)}觸發了開局效果`);
+      this.drive(this.wrap(this.runEffects(item.effects, ctx)));
+    }
+  }
 
   private mulligan(player: PlayerId, replace: number[]): boolean {
     const s = this.s;
@@ -2884,6 +2906,12 @@ export class Game {
     const me = s.players[ctx.controller];
     const foe = s.players[opp(ctx.controller)];
     switch (fn) {
+      case 'duplicateOtherLegendariesInDeck': {
+        const originals = [...me.deck].filter((h) => h.cardId !== ctx.sourceCardId && getCard(h.cardId).rarity === 'LEGENDARY');
+        for (const hc of originals) me.deck.push({ ...structuredClone(hc), uid: this.uid() });
+        this.log(me.id, `${this.name(ctx.sourceCardId)}複製了 ${originals.length} 張其他傳說卡`);
+        break;
+      }
       case 'counter':
         this.spellCountered = true;
         break;
