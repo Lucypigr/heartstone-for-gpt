@@ -138,6 +138,10 @@ export interface VioletPlayerState {
   voidSoulLevel?: number;
   /** 本場打出實際支付 2 Mana 的牌數 */
   paidTwoCards?: number;
+  heroAttacksThisGame?: number;
+  stealthAttackedTurn?: number;
+  /** Slime 'em! 暫存各自被消滅的手下 */
+  slimed?: string[];
   /** Warptooth：本回合友方角色受到傷害的不同次數 */
   friendlyDamageThisTurn?: number;
   /** 本場因 Reborn 再生過的友方手下 */
