@@ -132,11 +132,6 @@ async function main() {
     byName.get(en)!.push(r);
   }
 
-  for (const id of ['JAIL_913', 'JAIL_998', 'JAIL_453']) {
-    const r = byId.get(id);
-    if (r) console.log('PREPDBG', id, JSON.stringify(r.tags), JSON.stringify(r.strs.CARDTEXT?.enUS ?? ''));
-  }
-
   const typeOf = (r: RawCard) => TYPE_MAP[r.tags.CARDTYPE];
   const hasKw = (r: RawCard, k: Keyword) => KEYWORD_TAGS.some(([tag, kw]) => kw === k && r.tags[tag]);
 
@@ -298,9 +293,10 @@ async function main() {
     if (r.tags.CASTS_WHEN_DRAWN) def.castsWhenDrawn = true;
     if (r.tags.STARSHIP) def.starship = true;
     if (r.tags.TERRAN) def.terran = true;
-    // PREPARE 也可能只是「當你預備時」的關聯標籤；真正能執行牌堆動作的牌
-    // 會同時帶 DECK_ACTION_COST。官方 JAIL_913 / JAIL_998 皆為 PREPARE=1 + DECK_ACTION_COST=1。
-    if (r.tags.PREPARE && (r.tags.DECK_ACTION_COST || r.tags['1743'])) def.prepare = true;
+    // 目前 CardDefs 對 Prepare 卡不會輸出 PREPARE entity tag，而是 DECK_ACTION_COST=1
+    // 搭配卡面開頭的 Prepare。這也能排除 Jailbird 這類只「關心 Prepare」但不能自己預備的牌。
+    const prepareText = normalizeText(r.strs.CARDTEXT?.enUS ?? '');
+    if ((r.tags.DECK_ACTION_COST || r.tags['1743']) && /^Prepare(?:\b|[,.])/i.test(prepareText)) def.prepare = true;
     // 死亡騎士的符文需求
     if (r.tags.COST_BLOOD || r.tags.COST_FROST || r.tags.COST_UNHOLY) {
       def.runes = {};
