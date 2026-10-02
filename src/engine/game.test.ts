@@ -219,9 +219,10 @@ describe('2026：紫羅蘭堡批次復原（二）', () => {
     put(g, 'CAP_107t', 0);
     put(g, 'CAP_106', 0);
     const enemy = put(g, 'CS2_182', 1);
-    const before = enemy.hp;
+    const foe = g.s.players[1];
+    const before = enemy.hp + foe.hero.hp;
     g.apply({ type: 'endTurn' });
-    expect(enemy.hp).toBe(before - 2);
+    expect(enemy.hp + foe.hero.hp).toBe(before - 2);
   });
 
   it('Imp-formant 從敵方牌庫抽到時會替其對手召喚，並保留牌庫增益', () => {
