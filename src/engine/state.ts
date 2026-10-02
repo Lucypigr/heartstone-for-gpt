@@ -36,6 +36,8 @@ export interface HandCard {
   preparedTurn?: number;
   /** 碎裂兩半重組後的原卡；避免再次進手牌時重新碎裂 */
   shatterCombined?: boolean;
+  /** Noxious Bribe：這張二選一卡牌的兩個效果會同時生效 */
+  chooseOneCombined?: boolean;
 }
 
 export interface Minion {
