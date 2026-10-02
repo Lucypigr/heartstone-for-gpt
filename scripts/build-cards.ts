@@ -132,6 +132,13 @@ async function main() {
     byName.get(en)!.push(r);
   }
 
+  for (const root of ['CATA_134', 'CATA_306', 'CATA_479', 'CATA_489', 'CATA_820']) {
+    console.log('SHATTERDBG', root);
+    for (const r of raws.filter((x) => x.id.startsWith(root))) {
+      console.log('SHATTERDBGROW', r.id, JSON.stringify(r.tags), JSON.stringify(r.strs.CARDNAME?.enUS ?? ''), JSON.stringify(r.strs.CARDTEXT?.enUS ?? ''));
+    }
+  }
+
   const typeOf = (r: RawCard) => TYPE_MAP[r.tags.CARDTYPE];
   const hasKw = (r: RawCard, k: Keyword) => KEYWORD_TAGS.some(([tag, kw]) => kw === k && r.tags[tag]);
 
