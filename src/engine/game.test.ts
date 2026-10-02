@@ -300,6 +300,37 @@ describe('2026：紫羅蘭堡批次復原（一）', () => {
   });
 });
 
+describe('2026：Godfrey 與 Mug\'Zee 開局規則', () => {
+  it('Godfrey 讓爆掉的牌在之後有空位時返回並 -1 費', () => {
+    const deck = ['JAIL_509', ...Array(29).fill('CS2_182')];
+    const g = newGame({ deck });
+    const p = g.s.players[0];
+    p.hand = Array.from({ length: 10 }, () => g.newHandCard('CS2_182'));
+    const burned = g.newHandCard('CS2_231');
+    // 直接模擬抽牌進滿手狀態。
+    (g as any).enterHandCard(p, burned);
+    expect(p.overdrawReturn?.some((h) => h.uid === burned.uid)).toBe(true);
+    p.hand.pop();
+    (g as any).returnGodfreyOverdraw(p);
+    const returned = p.hand.find((h) => h.uid === burned.uid)!;
+    expect(returned.costMod).toBe(-1);
+  });
+
+  it('Mug\'Zee 同時滿足條件時取得兩個被動；Mug 第3個自己的回合起第一個手下 -2', () => {
+    const deck = ['JAIL_800', ...Array(29).fill('GAME_005')];
+    const g = newGame({ deck });
+    const p = g.s.players[0];
+    expect(p.heroPower.id).toBe('JAIL_800hp1');
+    expect(p.secondaryHeroPower?.id).toBe('JAIL_800hp2');
+    p.turnsStarted = 3;
+    p.minionsPlayedThisTurn = 0;
+    p.mana = 10;
+    const h = g.newHandCard('CS2_182');
+    p.hand.push(h);
+    expect(g.costOf(p, h)).toBe(Math.max(0, getCard('CS2_182').cost - 2));
+  });
+});
+
 describe('2026：紫羅蘭堡手牌調查與變形', () => {
   it('Ancient Augur 標記對手手牌，死亡時棄掉同一張實體', () => {
     const g = newGame();
