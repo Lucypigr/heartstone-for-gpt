@@ -53,7 +53,7 @@ export function App() {
     <div className="app">
       <header className="topbar">
         <button className="logo" onClick={() => setScreen('home')}>
-          爐石戰記 <small>for Claude</small>
+          爐石戰記 <small>for GPT</small>
         </button>
         <nav>
           <button className={screen === 'ladder' ? 'active' : ''} onClick={() => setScreen('ladder')}>

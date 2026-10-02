@@ -1,6 +1,8 @@
-# 爐石戰記 for Claude
+# 爐石戰記 for GPT
 
 一個用網頁做的爐石戰記（Hearthstone）風格卡牌遊戲。卡牌資料和 [hsreplay.net](https://hsreplay.net/zh-hant/cards/) 使用同一份官方資料（HearthSim 的 `CardDefs.xml`），有繁體中文卡名與敘述。
+
+這是從 Claude 版複製出的獨立專案，目前保留相同的遊戲功能，供 GPT 版後續調整。
 
 - ⚔️ **對戰電腦**：規則和爐石差不多（法力水晶、英雄能力、嘲諷、聖盾、衝鋒、突襲、風怒、潛行、劇毒、生命竊取、復生、冰凍、沉默、亡語、戰吼、連擊、超載、奧秘、發現、二選一、回音、雙生法術、比武、翠玉魔像、號召、滅殺、克蘇恩、星艦、死亡騎士的屍體與符文、抽中時施放、消耗生命值 / 屍體的卡……）
 - 🏆 **天梯**：像真人配對一樣排天梯（青銅 → 白銀 → 黃金 → 白金 → 鑽石 → 傳說），有星星、連勝加成、保底與每月賽季獎勵。配對到的「玩家」其實都是電腦，但每個人都不一樣：有新手也有高手、有主流套牌也有奇葩套路或亂組的牌；會打招呼、會說「打得好」、偶爾按錯、沒救了會投降。牌階越高，對手越強
@@ -25,7 +27,7 @@ npm test         # 執行測試
 
 ## 線上試玩（GitHub Pages）
 
-推送程式碼後會自動建置並部署到 `https://lucypigr.github.io/hearthstone-for-claude/`（設定檔在 `.github/workflows/deploy.yml`）。
+推送到 `main` 後會自動建置並部署到 `https://lucypigr.github.io/heartstone-for-gpt/`（設定檔在 `.github/workflows/deploy.yml`）。
 第一次使用前要到 GitHub 專案的 **Settings → Pages**，把 **Source** 設為 **GitHub Actions**。
 
 ## 卡牌資料

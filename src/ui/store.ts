@@ -2,7 +2,7 @@
 import { useSyncExternalStore } from 'react';
 import { newProfile, sanitizeProfile, type Profile } from '../game/profile';
 
-const KEY = 'hearthstone-for-claude/profile-v1';
+const KEY = 'heartstone-for-gpt/profile-v1';
 
 function load(): Profile {
   try {

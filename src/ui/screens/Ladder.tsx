@@ -21,7 +21,7 @@ import { Art } from '../components/Card';
 import { RankBadge, RankPips } from '../components/Rank';
 import { getProfile, setProfile, useProfile } from '../store';
 
-const LAST_DECK_KEY = 'hearthstone-for-claude/ladder-deck';
+const LAST_DECK_KEY = 'heartstone-for-gpt/ladder-deck';
 
 const QUEUE_TIPS = ['正在尋找實力相近的對手…', '正在連線到伺服器…', '對手正在載入…', '玩家越多，配對越快'];
 
