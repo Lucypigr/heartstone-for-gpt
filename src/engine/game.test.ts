@@ -1080,6 +1080,12 @@ describe('腐化', () => {
     expect(g.apply({ type: 'play', handUid: higherUid })).toBe(true);
     expect(target.cardId).toBe('DMF_073t');
     expect(g.handDef(target).keywords).toEqual(expect.arrayContaining(['DIVINE_SHIELD', 'RUSH']));
+
+    g.s.players[0].mana = 10;
+    expect(g.apply({ type: 'play', handUid: targetUid })).toBe(true);
+    const corrupted = g.s.players[0].board.find((m) => m.cardId === 'DMF_073t')!;
+    expect(g.hasKw(corrupted, 'DIVINE_SHIELD')).toBe(true);
+    expect(g.hasKw(corrupted, 'RUSH')).toBe(true);
   });
 
   it('使用目前費用判定，並保留手牌上的費用與數值增益', () => {
@@ -1098,6 +1104,45 @@ describe('腐化', () => {
     expect(target.atkBuff).toBe(2);
     expect(target.hpBuff).toBe(3);
     expect(g.costOf(g.s.players[0], target)).toBe(2);
+  });
+
+  it('禍不單行每張高費卡只腐化一階，二次腐化後能摧毀 3 個敵方手下', () => {
+    const g = newGame();
+    const disasterUid = give(g, 'DMF_117');
+    const disaster = g.handCard(disasterUid)!.card;
+
+    let triggerUid = give(g, 'CS2_200'); // 石拳巨魔：6 費 > 4 費
+    expect(g.apply({ type: 'play', handUid: triggerUid })).toBe(true);
+    expect(disaster.cardId).toBe('DMF_117t');
+
+    g.s.players[0].mana = 10;
+    triggerUid = give(g, 'CS2_200');
+    expect(g.apply({ type: 'play', handUid: triggerUid })).toBe(true);
+    expect(disaster.cardId).toBe('DMF_117t2');
+
+    put(g, 'CS2_231', 1);
+    put(g, 'CS2_231', 1);
+    put(g, 'CS2_231', 1);
+    g.s.players[0].mana = 10;
+    expect(g.apply({ type: 'play', handUid: disasterUid })).toBe(true);
+    expect(g.s.players[1].board).toHaveLength(0);
+  });
+
+  it('駭人生長體可以無限再次腐化並持續成長', () => {
+    const g = newGame();
+    const growthUid = give(g, 'DMF_124');
+    const growth = g.handCard(growthUid)!.card;
+
+    let triggerUid = give(g, 'CS2_182'); // 4 費 > 2 費
+    expect(g.apply({ type: 'play', handUid: triggerUid })).toBe(true);
+    expect(growth.cardId).toBe('DMF_124t');
+    expect(g.handStats(0, growth)).toEqual({ atk: 3, hp: 3 });
+
+    g.s.players[0].mana = 10;
+    triggerUid = give(g, 'CS2_182');
+    expect(g.apply({ type: 'play', handUid: triggerUid })).toBe(true);
+    expect(growth.cardId).toBe('DMF_124t');
+    expect(g.handStats(0, growth)).toEqual({ atk: 4, hp: 4 });
   });
 
   it('腐化可以把手下真正變成武器並正常裝備', () => {
