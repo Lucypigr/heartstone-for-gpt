@@ -157,6 +157,14 @@ export interface PlayerState {
   jade?: number;
   /** 本回合施放的法術數 */
   spellsThisTurn?: number;
+  /** 本場以正好 2 點法力打出的牌數（Jade Guardians） */
+  cardsPlayedForTwoMana?: number;
+  /** 開局牌組快照條件（紫羅蘭堡規則破壞者/職業卡） */
+  deckStartedNoSpells?: boolean;
+  deckStartedNoMinions?: boolean;
+  deckStartedAllCostMax3?: boolean;
+  /** Chef Neth'rek：再經過幾個自己的回合後把法力設為 10 */
+  mana10AfterTurns?: number;
   /** 延遲的效果（例如「2 回合後召喚…」） */
   delayed?: { turns: number; effects: Effect[]; sourceCardId: string }[];
   /** 本場對戰剩下的時間都有效的能力（例如「在你的回合結束時對對手造成 3 點傷害」） */
