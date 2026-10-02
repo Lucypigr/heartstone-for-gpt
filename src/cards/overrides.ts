@@ -3,11 +3,11 @@
 // key 是卡牌 ID（可在 hsreplay 卡牌網址或 .cache/unsupported.txt 找到）。
 // 修改後請執行 `npm run cards` 重新產生資料（覆寫的卡才會被收錄）。
 // ============================================================================
-import type { Ability, CardDef, Effect, HeroPowerSpec, TargetReq } from '../engine/types';
+import type { Ability, CardDef, Effect, HeroPowerDef, HeroPowerSpec, TargetReq } from '../engine/types';
 
 export type Override = Partial<Omit<CardDef, 'id' | 'dbfId' | 'name' | 'nameEn' | 'text' | 'heroPower'>> & {
   /** 英雄卡的新英雄能力（名稱、敘述、費用會自動從卡牌資料帶入） */
-  heroPower?: HeroPowerSpec;
+  heroPower?: HeroPowerSpec | HeroPowerDef;
   /** 覆寫中引用的衍生卡，需一起收錄 */
   tokens?: string[];
 };
@@ -158,6 +158,7 @@ export const OVERRIDES: Record<string, Override> = {
       text: '被動：每回合第一個手下消耗減少(2)。（第3回合解鎖）',
       cost: 0,
       passive: true,
+      effects: [],
     },
     secondaryHeroPower: {
       id: 'JAIL_800hp2',
@@ -165,6 +166,7 @@ export const OVERRIDES: Record<string, Override> = {
       text: '被動：你每打出第5個手下，其戰吼觸發兩次。',
       cost: 0,
       passive: true,
+      effects: [],
     },
   },
   JAIL_802: {
