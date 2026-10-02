@@ -211,6 +211,7 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
   // 對戰動畫：每次狀態更新後，依照新的特效事件排出時間軸播放（見 ../fx.ts）。
   // 已經從畫面消失的角色，用上一次畫面的快照來播放。
   const battleRef = useRef<HTMLDivElement>(null);
+  const placeGhostRef = useRef<HTMLDivElement>(null);
   const snapshot = useRef(new Map<number, Snap>());
   const lastAnimFx = useRef<number | null>(null);
   /** 動畫播完的時間（電腦會等動畫播完才行動） */
@@ -391,8 +392,10 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
   };
 
   const selectedHand = mode.k === 'card' ? mode.handUid : null;
+  const selectedCard = selectedHand !== null ? (me.hand.find((h) => h.uid === selectedHand) ?? null) : null;
   const canTrade = selectedHand !== null && g.check({ type: 'trade', handUid: selectedHand }).ok;
-  const selectedDef = selectedHand !== null ? getCard(me.hand.find((h) => h.uid === selectedHand)?.cardId ?? 'GAME_005') : null;
+  const selectedDef = selectedCard ? g.handDef(selectedCard) : null;
+  const selectedStats = selectedCard && selectedDef?.type === 'MINION' ? g.handStats(ME, selectedCard) : null;
   const placing = mode.k === 'card' && mode.stage === 'place';
 
   const hint = (() => {
@@ -433,8 +436,25 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
   return (
     <div
       ref={battleRef}
-      className={`battle ${myTurn ? 'my-turn' : ''}`}
+      className={`battle ${myTurn ? 'my-turn' : ''} ${placing ? 'placing-card' : ''}`}
       style={{ '--mw': `${mw}px`, '--hw': `${hw}px`, '--cw': `${cw}px` } as CSSProperties}
+      onPointerDown={(e) => {
+        if (!placing || !placeGhostRef.current) return;
+        placeGhostRef.current.style.left = `${e.clientX}px`;
+        placeGhostRef.current.style.top = `${e.clientY}px`;
+        placeGhostRef.current.classList.add('visible');
+      }}
+      onPointerMove={(e) => {
+        if (!placing || !placeGhostRef.current) return;
+        placeGhostRef.current.style.left = `${e.clientX}px`;
+        placeGhostRef.current.style.top = `${e.clientY}px`;
+        placeGhostRef.current.classList.add('visible');
+      }}
+      onPointerUp={(e) => {
+        if (e.pointerType !== 'mouse') placeGhostRef.current?.classList.remove('visible');
+      }}
+      onPointerCancel={() => placeGhostRef.current?.classList.remove('visible')}
+      onPointerLeave={() => placeGhostRef.current?.classList.remove('visible')}
       onClick={() => {
         if (mode.k !== 'idle') setMode({ k: 'idle' });
         if (inspect) setInspect(null);
@@ -628,6 +648,22 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
           })}
         </div>
       </div>
+
+      {/* ---------------- 放置手下：半透明卡牌跟隨滑鼠 / 手指 ---------------- */}
+      {placing && selectedCard && selectedDef && (
+        <div ref={placeGhostRef} className="placement-card-ghost" aria-hidden="true">
+          <CardView
+            cardId={selectedCard.cardId}
+            def={selectedCard.parts ? selectedDef : undefined}
+            width={Math.round(clamp(cw * 1.12, 84, 146))}
+            cost={g.costOf(me, selectedCard)}
+            attack={selectedStats?.atk}
+            health={selectedStats?.hp}
+            spellDamage={g.spellDamage(ME)}
+            selected
+          />
+        </div>
+      )}
 
       {/* ---------------- 浮動資訊 ---------------- */}
       {inspect && 'power' in inspect && (
