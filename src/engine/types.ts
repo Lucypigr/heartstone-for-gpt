@@ -434,6 +434,10 @@ export interface CardDef {
   fullRebornEnchantments?: boolean;
   /** 紫羅蘭堡薩滿法術：在手牌中看見你施放指定數量法術後變形成對應元素手下 */
   handTransformAfterSpells?: { count: number; into: string };
+  /** 獲得正向屬性時，再額外獲得固定 +X/+X（Dalaran Champion） */
+  extraStatsOnBuff?: number;
+  /** 手牌中的費用/攻擊/生命等於目前剩餘法力，最低 1（Picklock） */
+  manaMirrorInHand?: boolean;
   target?: TargetReq;
   chooseOne?: ChooseOneOption[];
   secret?: boolean;
