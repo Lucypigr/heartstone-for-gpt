@@ -1054,6 +1054,8 @@ export class Game {
         m.tempKeywords = [];
       }
     }
+    // Holmes 的調查只持續到指定的「對手下一回合」結束。
+    for (const pl of s.players) if (pl.holmesWatches) pl.holmesWatches = pl.holmesWatches.filter((w) => w.turn > s.turn);
     // 解凍：沒有錯過攻擊機會的角色才會在回合結束解凍
     const thaw = (c: Char) => {
       if (!c.frozen) return;
@@ -1117,6 +1119,16 @@ export class Game {
     // 雙生法術：把一張沒有雙生法術的複製加入手牌
     if (def.twinspellCopy && p.hand.length < MAX_HAND) p.hand.push(this.newHandCard(def.twinspellCopy));
     p.cardsPlayedThisTurn++;
+    // Inspector Murloc Holmes：只在被調查對手的下一個回合檢查「同名卡」。
+    const watcher = s.players[opp(p.id)];
+    if (watcher.holmesWatches?.length) {
+      const matches = watcher.holmesWatches.filter((w) => w.turn === s.turn && w.cardName === def.nameEn);
+      for (const w of matches) {
+        for (let i = 0; i < 3; i++) this.addToHand(watcher, 'GAME_005');
+        this.log(watcher.id, `${watcher.name}的調查命中：${def.name}`);
+      }
+      if (matches.length) watcher.holmesWatches = watcher.holmesWatches.filter((w) => !matches.includes(w));
+    }
     p.nextCardDiscount = 0;
     if (def.overload) p.overloadOwed += def.overload;
     this.corruptHand(p, corruptibleUids, cost);
@@ -3734,6 +3746,57 @@ export class Game {
         if (me.graveyard.filter((id) => id === ctx.sourceCardId).length < 5) break;
         const target = pick(s, this.chars().filter((x) => this.alive(x) && x.owner !== ctx.controller));
         if (target) yield* this.damage({ owner: ctx.controller, uid: null, cardId: 'CS2_029' }, target.uid, 6 + this.spellDamage(ctx.controller));
+        break;
+      }
+      case 'ancientAugur': {
+        const self = ctx.sourceUid !== null ? this.minion(ctx.sourceUid) : null;
+        const sample = shuffle(s, [...foe.hand]).slice(0, 3);
+        if (!self || !sample.length) break;
+        const id = yield* this.choose(ctx, sample.map((h) => h.cardId), '從對手手牌中暗中選擇一張');
+        const picked = sample.find((h) => h.cardId === id);
+        if (picked) self.markedHandUid = picked.uid;
+        break;
+      }
+      case 'ancientAugurDiscard': {
+        const self = ctx.sourceSnapshot ?? (ctx.sourceUid !== null ? this.minion(ctx.sourceUid) : null);
+        const uid = self?.markedHandUid;
+        if (uid === undefined) break;
+        const i = foe.hand.findIndex((h) => h.uid === uid);
+        if (i >= 0) {
+          const [discarded] = foe.hand.splice(i, 1);
+          this.log(me.id, `${this.name('JAIL_303')}使對手棄掉了${this.name(discarded.cardId)}`);
+        }
+        break;
+      }
+      case 'bootlegAlchemist': {
+        if (!me.hand.length) break;
+        const options = [...me.hand];
+        const id = yield* this.choose(ctx, options.map((h) => h.cardId), '選擇你手牌中的一張牌');
+        const h = options.find((x) => x.cardId === id);
+        if (!h || !me.hand.includes(h)) break;
+        const originalCost = this.costOf(me, h);
+        const targetPrintedCost = getCard(h.cardId).cost + 5;
+        const pool = this.randomPool({ type: 'SPELL', cost: targetPrintedCost }, ctx.controller, false);
+        const spell = pick(s, pool);
+        if (!spell) break;
+        h.cardId = spell.id;
+        h.costMod = originalCost - spell.cost;
+        h.atkBuff = 0;
+        h.hpBuff = 0;
+        h.parts = undefined;
+        h.starship = undefined;
+        h.prepareDiscount = undefined;
+        h.prepared = undefined;
+        h.preparedTurn = undefined;
+        this.log(me.id, `手牌變形成${this.name(spell.id)}，費用維持 ${originalCost}`);
+        break;
+      }
+      case 'inspectEnemyHand': {
+        const sample = shuffle(s, [...foe.hand]).slice(0, 4);
+        if (!sample.length) break;
+        const id = yield* this.choose(ctx, sample.map((h) => h.cardId), '調查對手手牌中的一張牌');
+        const h = sample.find((x) => x.cardId === id);
+        if (h) (me.holmesWatches ??= []).push({ cardName: getCard(h.cardId).nameEn, turn: s.turn + 1 });
         break;
       }
       case 'violetPunisher': {
