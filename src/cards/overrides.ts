@@ -4,6 +4,7 @@
 // 修改後請執行 `npm run cards` 重新產生資料（覆寫的卡才會被收錄）。
 // ============================================================================
 import type { Ability, CardDef, Effect, HeroPowerSpec, TargetReq } from '../engine/types';
+import { VIOLET_OVERRIDES } from './violet';
 
 export type Override = Partial<Omit<CardDef, 'id' | 'dbfId' | 'name' | 'nameEn' | 'text' | 'heroPower'>> & {
   /** 英雄卡的新英雄能力（名稱、敘述、費用會自動從卡牌資料帶入） */
@@ -766,3 +767,6 @@ export const OVERRIDES: Record<string, Override> = {
     abilities: play({ e: 'evolve', target: { t: 'chosen' }, amount: 1 }),
   },
 };
+
+// 2026《紫羅蘭堡大逃亡》集中在獨立模組，避免主覆寫表被系列特殊規則淹沒。
+Object.assign(OVERRIDES, VIOLET_OVERRIDES);
