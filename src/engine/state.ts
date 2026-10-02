@@ -180,6 +180,8 @@ export interface PlayerState {
   /** 開局牌組快照條件（紫羅蘭堡規則破壞者/職業卡） */
   deckStartedNoSpells?: boolean;
   deckStartedNoMinions?: boolean;
+  /** Mug'Zee：起始牌組除了自己以外沒有其他手下 */
+  deckStartedNoOtherMinions?: boolean;
   deckStartedAllCostMax3?: boolean;
   /** Chef Neth'rek：再經過幾個自己的回合後把法力設為 10 */
   mana10AfterTurns?: number;
@@ -223,6 +225,13 @@ export interface PlayerState {
   canSaySorry?: boolean;
   /** Inspector Murloc Holmes：監看對手下一回合是否打出指定名稱 */
   holmesWatches?: { cardName: string; turn: number }[];
+  /** Godfrey：被爆掉、等待手牌有空位後返回的卡 */
+  overdrawReturn?: HandCard[];
+  godfreyOverdraw?: boolean;
+  /** Mug'Zee 被動英雄能力使用的手下計數 */
+  minionsPlayedThisTurn?: number;
+  minionsPlayedThisGame?: number;
+  turnsStarted?: number;
   elementalLastTurn: boolean;
   elementalThisTurn: boolean;
   mulliganDone: boolean;
