@@ -4,7 +4,7 @@
 // 只保留「效果能被引擎完整執行」的卡牌，並輸出繁體中文名稱 / 敘述。
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { loadCardDefsXml, parseCardDefs, type RawCard } from './carddefs';
-import { parseCardText, Unsupported, type ParseEnv, type ParsedCard, type TokenQuery } from '../src/cards/parser';
+import { normalizeText, parseCardText, Unsupported, type ParseEnv, type ParsedCard, type TokenQuery } from '../src/cards/parser';
 import type { CardClass, CardDef, CardType, ChooseOneOption, Keyword, Race, Rarity } from '../src/engine/types';
 import { OVERRIDES } from '../src/cards/overrides';
 
@@ -296,7 +296,7 @@ async function main() {
     // PREPARE 標籤也會出現在「When you Prepare...」的關聯卡。
     // 只有卡面本身以 Prepare 開頭，才代表這張牌能執行預備動作。
     const printedEn = r.strs.CARDTEXT?.enUS ?? '';
-    const isPrepareCard = /^\s*(?:\[x\]\s*)?(?:<b>)?Prepare\b/i.test(printedEn.replace(/<\/b>/gi, ''));
+    const isPrepareCard = /^Prepare(?:\b|[,.])/i.test(normalizeText(printedEn));
     if (r.tags.PREPARE && isPrepareCard) def.prepare = true;
     // 死亡騎士的符文需求
     if (r.tags.COST_BLOOD || r.tags.COST_FROST || r.tags.COST_UNHOLY) {
@@ -376,10 +376,8 @@ async function main() {
         // Prepare 是手牌替代動作，不是出牌效果；交由引擎處理。
         // CardDefs 有 [x]、<b>Prepare</b>、<b>Prepare:</b> 等不同標記形狀。
         if (def.prepare) {
-          stageText = stageText
-            .replace(/^\s*(?:\[x\]\s*)?<b>Prepare:?<\/b>[\s.:,;-]*/i, '')
-            .replace(/^\s*(?:\[x\]\s*)?Prepare:?\s*[,.;-]?\s*/i, '')
-            .trim();
+          // 先正規化再移除，避免 CardDefs 的粗體、換行、逗點等標記差異。
+          stageText = normalizeText(stageText).replace(/^Prepare(?:[,:.]\s*|\s+)/i, '').trim();
         }
         parsed = parseCardText({ textEn: stageText, cardType: type }, makeEnv(r.id));
       }
