@@ -159,6 +159,52 @@ describe('2026：預備（Prepare）', () => {
   });
 });
 
+describe('2026：碎裂（Shatter）', () => {
+  it('進入手牌時分裂到最左與最右，中間牌打出後自動重組', () => {
+    const g = newGame();
+    const p = g.s.players[0];
+    const middle = g.newHandCard('CS2_231');
+    p.hand = [middle];
+    p.deck = [g.newHandCard('CATA_479')];
+
+    g.drawRaw(p);
+    expect(p.hand.map((h) => h.cardId)).toEqual(['CATA_479t', 'CS2_231', 'CATA_479t2']);
+    expect(g.costOf(p, p.hand[0])).toBe(4);
+    expect(g.costOf(p, p.hand[2])).toBe(4);
+
+    p.mana = 10;
+    expect(g.apply({ type: 'play', handUid: middle.uid, position: 0 })).toBe(true);
+    expect(p.hand).toHaveLength(1);
+    expect(p.hand[0].cardId).toBe('CATA_479');
+    expect(p.hand[0].shatterCombined).toBe(true);
+  });
+
+  it('手上已有 9 張時拿到碎裂牌，依官方規則保留完整原卡而不碎裂', () => {
+    const g = newGame();
+    const p = g.s.players[0];
+    p.hand = Array.from({ length: 9 }, () => g.newHandCard('CS2_231'));
+    p.deck = [g.newHandCard('CATA_479')];
+
+    const entered = g.drawRaw(p);
+    expect(entered?.cardId).toBe('CATA_479');
+    expect(p.hand).toHaveLength(10);
+    expect(p.hand.filter((h) => h.cardId === 'CATA_479')).toHaveLength(1);
+    expect(p.hand.some((h) => h.cardId === 'CATA_479t' || h.cardId === 'CATA_479t2')).toBe(false);
+  });
+
+  it('空手拿到碎裂牌時兩半立即相鄰，因此直接重組成完整牌', () => {
+    const g = newGame();
+    const p = g.s.players[0];
+    p.hand = [];
+    p.deck = [g.newHandCard('CATA_479')];
+
+    g.drawRaw(p);
+    expect(p.hand).toHaveLength(1);
+    expect(p.hand[0].cardId).toBe('CATA_479');
+    expect(p.hand[0].shatterCombined).toBe(true);
+  });
+});
+
 describe('戰鬥', () => {
   it('手下互相攻擊並造成傷害，嘲諷必須優先攻擊', () => {
     const g = newGame();

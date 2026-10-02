@@ -34,6 +34,8 @@ export interface HandCard {
   prepared?: boolean;
   /** 預備發生的遊戲回合；同回合不能打出 */
   preparedTurn?: number;
+  /** 碎裂兩半重組後的原卡；避免再次進手牌時重新碎裂 */
+  shatterCombined?: boolean;
 }
 
 export interface Minion {
