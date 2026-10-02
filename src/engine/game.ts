@@ -499,7 +499,11 @@ export class Game {
     const def = this.handDef(hc);
     const bonus = isCthun(hc.cardId) ? this.s.players[pid].cthun : undefined;
     const extra = def.type === 'MINION' ? this.s.players[pid].minionAtkBonus ?? 0 : 0;
-    return { atk: (def.attack ?? 0) + hc.atkBuff + (bonus?.atk ?? 0) + extra, hp: (def.health ?? 0) + hc.hpBuff + (bonus?.hp ?? 0) };
+    const mirrored = def.manaMirrorInHand ? (hc.lockedManaValue ?? Math.max(1, this.s.players[pid].mana)) : undefined;
+    return {
+      atk: (mirrored ?? def.attack ?? 0) + hc.atkBuff + (bonus?.atk ?? 0) + extra,
+      hp: (mirrored ?? def.health ?? 0) + hc.hpBuff + (bonus?.hp ?? 0),
+    };
   }
 
   /**
@@ -545,9 +549,11 @@ export class Game {
 
   costOf(p: PlayerState, hc: HandCard): number {
     const def = this.handDef(hc);
-    const base = hc.cardId === 'JAIL_433' && hc.opponentCopyPlayedSeen
-      ? 1
-      : (def.costIf && this.evalCond(def.costIf.cond, this.baseCtx(p.id)) ? def.costIf.cost : def.cost);
+    const base = def.manaMirrorInHand
+      ? (hc.lockedManaValue ?? Math.max(1, p.mana))
+      : hc.cardId === 'JAIL_433' && hc.opponentCopyPlayedSeen
+        ? 1
+        : (def.costIf && this.evalCond(def.costIf.cond, this.baseCtx(p.id)) ? def.costIf.cost : def.cost);
     let cost = base + hc.costMod - (hc.prepareDiscount ?? 0);
     // 每回合的第一張法術（例如薩塔隱蔽力場）
     if (def.type === 'SPELL' && !p.spellsThisTurn && p.id === this.s.current) {
@@ -1023,6 +1029,16 @@ export class Game {
     }
     this.recombineShatter(p);
     yield* this.emit({ k: 'turnEnd', player: pid });
+    // 目標/光環型法術：每個自己的回合結束觸發一次，持續指定回合數。
+    if (p.objectives?.length) {
+      for (const o of [...p.objectives]) {
+        yield* this.runEffects(o.effects, { ...this.baseCtx(pid), sourceCardId: o.sourceCardId });
+        o.remaining--;
+        yield* this.processDeaths();
+        if (this.over) return;
+      }
+      p.objectives = p.objectives.filter((o) => o.remaining > 0);
+    }
     // 回合結束時回到手牌的卡（例如屍淇淋）
     if (p.endOfTurnCards?.length) {
       for (const id of p.endOfTurnCards) this.addToHand(p, id);
@@ -1079,6 +1095,7 @@ export class Game {
     const outcast = idx === 0 || idx === p.hand.length - 1;
     const combo = p.cardsPlayedThisTurn > 0;
     const echo = this.hasEcho(p.id, hc);
+    if (def.manaMirrorInHand) hc.lockedManaValue = Math.max(1, p.mana);
     const kind = this.costKind(p, hc);
     if (kind === 'health') this.payHealth(p, cost);
     else if (kind === 'corpses') this.spendCorpses(p, cost);
@@ -1775,7 +1792,8 @@ export class Game {
     const parts = hand?.parts && cardId === ZOMBEAST_ID ? hand.parts : undefined;
     const ship = hand?.starship;
     const def = ship ? starshipDef(cardId, ship) : parts ? zombeastDef(parts) : getCard(cardId);
-    const baseHp = def.health ?? 1;
+    const mirrored = def.manaMirrorInHand ? (hand?.lockedManaValue ?? 1) : undefined;
+    const baseHp = mirrored ?? def.health ?? 1;
     const keywords = [...(def.keywords ?? [])];
     // 克蘇恩上場時帶著累積的加成
     const bonus = isCthun(cardId) ? this.s.players[owner].cthun : undefined;
@@ -1785,7 +1803,7 @@ export class Game {
       uid: this.uid(),
       cardId,
       owner,
-      baseAtk: def.attack ?? 0,
+      baseAtk: mirrored ?? def.attack ?? 0,
       baseHp,
       atkBuff: (hand?.atkBuff ?? 0) + (bonus?.atk ?? 0),
       tempAtk: 0,
@@ -2664,6 +2682,11 @@ export class Game {
           if (hc) {
             hc.card.atkBuff += atk;
             hc.card.hpBuff += hp;
+            const extra = getCard(hc.card.cardId).extraStatsOnBuff ?? 0;
+            if (extra && (atk > 0 || hp > 0)) {
+              hc.card.atkBuff += extra;
+              hc.card.hpBuff += extra;
+            }
           }
           break;
         }
@@ -2680,6 +2703,12 @@ export class Game {
           else c.atkBuff += atk;
           c.maxHp += hp;
           c.hp += hp;
+          const extra = getCard(c.cardId).extraStatsOnBuff ?? 0;
+          if (extra && (atk > 0 || hp > 0)) {
+            c.atkBuff += extra;
+            c.maxHp += extra;
+            c.hp += extra;
+          }
           if (e.keywords) {
             for (const k of e.keywords) {
               if (e.temp) c.tempKeywords.push(k);
@@ -3048,6 +3077,11 @@ export class Game {
         for (const h of targets) {
           h.atkBuff += e.atk;
           h.hpBuff += e.hp;
+          const extra = getCard(h.cardId).extraStatsOnBuff ?? 0;
+          if (extra && (e.atk > 0 || e.hp > 0)) {
+            h.atkBuff += extra;
+            h.hpBuff += extra;
+          }
         }
         break;
       }
@@ -3700,6 +3734,40 @@ export class Game {
         if (me.graveyard.filter((id) => id === ctx.sourceCardId).length < 5) break;
         const target = pick(s, this.chars().filter((x) => this.alive(x) && x.owner !== ctx.controller));
         if (target) yield* this.damage({ owner: ctx.controller, uid: null, cardId: 'CS2_029' }, target.uid, 6 + this.spellDamage(ctx.controller));
+        break;
+      }
+      case 'violetPunisher': {
+        if (ctx.chosen === null) break;
+        const target = this.minion(ctx.chosen);
+        const self = ctx.sourceUid !== null ? this.minion(ctx.sourceUid) : null;
+        if (!target || !self) break;
+        const stealable: Keyword[] = ['TAUNT','WINDFURY','DIVINE_SHIELD','POISONOUS','ELUSIVE','RUSH','LIFESTEAL','REBORN'];
+        const stolen = stealable.filter((k) => this.hasKw(target, k));
+        for (const k of stolen) {
+          target.keywords = target.keywords.filter((x) => x !== k);
+          target.tempKeywords = target.tempKeywords.filter((x) => x !== k);
+          target.nextTurnKeywords = target.nextTurnKeywords.filter((x) => x !== k);
+          target.auraKeywords = target.auraKeywords.filter((x) => x !== k);
+          if (!self.keywords.includes(k)) self.keywords.push(k);
+        }
+        if (stolen.length) {
+          self.atkBuff += stolen.length;
+          self.maxHp += stolen.length;
+          self.hp += stolen.length;
+        }
+        this.recalcAuras();
+        break;
+      }
+      case 'reinforcementAura':
+        (me.objectives ??= []).push({
+          remaining: 3,
+          sourceCardId: ctx.sourceCardId,
+          effects: [{ e: 'recruit', count: 1, maxCost: 2 }],
+        });
+        break;
+      case 'picklockDamage': {
+        const self = ctx.sourceUid !== null ? this.minion(ctx.sourceUid) : null;
+        if (self && ctx.chosen !== null) yield* this.damage(this.dmgSource(ctx), ctx.chosen, Math.max(1, self.baseAtk));
         break;
       }
       case 'chefNethrekStart':
