@@ -64,6 +64,19 @@ describe('卡牌敘述解析', () => {
     expect(st.abilities[0].effects[0]).toMatchObject({ e: 'buff', keywords: ['STEALTH'], untilNextTurn: true });
   });
 
+  it('紫羅蘭堡：Start of Game 與 twice 可以解析', () => {
+    const start = parse('<b>Start of Game:</b> Draw a card.');
+    expect(start.abilities[0].on).toEqual({ k: 'startGame' });
+    expect(start.abilities[0].effects[0]).toMatchObject({ e: 'draw', count: 1, who: 'self' });
+
+    const twice = parse('<b>Battlecry:</b> Deal 1 damage to all other friendly minions, twice.');
+    expect(twice.abilities[0].effects[0]).toMatchObject({
+      e: 'repeat',
+      times: 2,
+      effects: [{ e: 'damage', amount: 1, target: { t: 'all', filter: { side: 'friendly', excludeSelf: true } } }],
+    });
+  });
+
   it('已腐化版本的 Corrupted 顯示標記不會被當成效果', () => {
     const r = parse('<b>Corrupted</b>\n<b>Battlecry:</b> Draw a card.');
     expect(r.abilities[0].on).toEqual({ k: 'play' });
