@@ -221,7 +221,7 @@ export class Game {
         maxMana: 0,
         overloadOwed: 0,
         overloadLocked: 0,
-        deck: o.decks[id].map((cardId) => game.newHandCard(cardId)),
+        deck: o.decks[id].map((cardId) => ({ ...game.newHandCard(cardId), startedInDeck: true })),
         deckStartedNoSpells: o.decks[id].every((cardId) => getCard(cardId).type !== 'SPELL'),
         deckStartedNoMinions: o.decks[id].every((cardId) => getCard(cardId).type !== 'MINION'),
         deckStartedAllCostMax3: o.decks[id].every((cardId) => getCard(cardId).cost <= 3),
@@ -545,7 +545,10 @@ export class Game {
 
   costOf(p: PlayerState, hc: HandCard): number {
     const def = this.handDef(hc);
-    let cost = (def.costIf && this.evalCond(def.costIf.cond, this.baseCtx(p.id)) ? def.costIf.cost : def.cost) + hc.costMod - (hc.prepareDiscount ?? 0);
+    const base = hc.cardId === 'JAIL_433' && hc.opponentCopyPlayedSeen
+      ? 1
+      : (def.costIf && this.evalCond(def.costIf.cond, this.baseCtx(p.id)) ? def.costIf.cost : def.cost);
+    let cost = base + hc.costMod - (hc.prepareDiscount ?? 0);
     // 每回合的第一張法術（例如薩塔隱蔽力場）
     if (def.type === 'SPELL' && !p.spellsThisTurn && p.id === this.s.current) {
       for (const m of p.board) {
@@ -573,6 +576,11 @@ export class Game {
     if (p.nextCardDiscount && p.id === this.s.current) cost -= p.nextCardDiscount;
     if (def.type === 'SPELL' && p.nextSpellDiscount?.turn === this.s.turn && p.id === this.s.current) cost -= p.nextSpellDiscount.amount;
     if (def.type === 'MINION' && p.minionTax?.turn === this.s.turn) cost += p.minionTax.amount;
+    if (def.type === 'MINION') {
+      const jailers = [...this.s.players[0].board, ...this.s.players[1].board]
+        .filter((m) => m.cardId === 'JAIL_890' && !m.silenced && !m.dead && (m.dormantTurns ?? 0) <= 0).length;
+      cost += jailers * 2;
+    }
     // 回音卡的消耗不會低於 1
     return Math.max(this.hasEcho(p.id, hc) ? Math.min(1, def.cost) : 0, cost);
   }
@@ -960,6 +968,7 @@ export class Game {
     p.drawnThisTurn = 0;
     s.deathsThisTurn = 0;
     p.heroAttackedThisTurn = false;
+    p.damagedFriendlyUidsThisTurn = [];
     for (const pl of s.players) pl.nextCardDiscount = 0;
     p.elementalLastTurn = p.elementalThisTurn;
     p.elementalThisTurn = false;
@@ -1079,6 +1088,11 @@ export class Game {
     }
     if (p.nextCardCorpsesTurn === s.turn) p.nextCardCorpsesTurn = undefined;
     if (def.type === 'SPELL' && p.nextSpellDiscount?.turn === s.turn) p.nextSpellDiscount = undefined;
+    if (hc.copiedFromOpponent) {
+      for (const held of p.hand) {
+        if (held.uid !== hc.uid && (held.cardId === 'JAIL_432' || held.cardId === 'JAIL_433')) held.opponentCopyPlayedSeen = true;
+      }
+    }
     p.hand.splice(idx, 1);
     this.recombineShatter(p);
     // 回音：把一張複製加入手牌，回合結束時消失
@@ -1214,7 +1228,7 @@ export class Game {
     const hc = p.hand.find((h) => h.uid === handUid);
     if (!hc) return { ok: false, reason: '找不到卡牌' };
     const def = this.handDef(hc);
-    if (!def.prepare) return { ok: false, reason: '這張牌沒有預備' };
+    if (!def.prepare && !hc.grantedPrepare) return { ok: false, reason: '這張牌沒有預備' };
     if (hc.prepared) return { ok: false, reason: '這張牌已經預備過' };
     if (p.mana < 1) return { ok: false, reason: '至少需要 1 點剩餘法力才能預備' };
     if (this.costOf(p, hc) <= 0) return { ok: false, reason: '這張牌已經是 0 費' };
@@ -1312,7 +1326,10 @@ export class Game {
     this.fx({ kind: 'attack', uid: attackerUid, target: targetUid, player: pid });
 
     attacker.attacks++;
-    if (isHero(attacker)) s.players[pid].heroAttackedThisTurn = true;
+    if (isHero(attacker)) {
+      s.players[pid].heroAttackedThisTurn = true;
+      s.players[pid].heroAttacksThisGame = (s.players[pid].heroAttacksThisGame ?? 0) + 1;
+    }
 
     this.currentAttack = { attacker: attackerUid, defender: targetUid };
     if (!isHero(attacker) && this.hasKw(attacker, 'STEALTH')) {
@@ -1392,6 +1409,19 @@ export class Game {
   // 基本操作：傷害 / 治療 / 抽牌 / 召喚
   // ==========================================================================
 
+  private *summonWarptooths(p: PlayerState): Gen {
+    while (p.board.length < MAX_BOARD) {
+      const fromHand = p.hand.find((h) => h.cardId === 'JAIL_421');
+      const fromDeck = p.deck.find((h) => h.cardId === 'JAIL_421');
+      const card = fromHand ?? fromDeck;
+      if (!card) break;
+      if (fromHand) p.hand.splice(p.hand.indexOf(fromHand), 1);
+      else p.deck.splice(p.deck.indexOf(fromDeck!), 1);
+      yield* this.summon(p.id, 'JAIL_421', undefined, card);
+      this.log(p.id, `${this.name('JAIL_421')}因四個不同友方角色受傷而登場`);
+    }
+  }
+
   private *damage(src: DmgSource, targetUid: number, amount: number): Gen<number> {
     const sourceMinion = src.uid !== null ? this.minion(src.uid) : null;
     if (sourceMinion && this.s.current === src.owner) {
@@ -1402,6 +1432,12 @@ export class Game {
     }
     const t = this.char(targetUid);
     if (!t || amount <= 0 || this.over) return 0;
+    if (src.cardId === 'JAIL_443' && isHero(t)) {
+      const deck = this.s.players[t.owner].deck;
+      for (let i = 0; i < amount; i++) deck.splice(randomInt(this.s, deck.length + 1), 0, this.newHandCard('JAIL_443t'));
+      this.log(src.owner, `${this.name('JAIL_443')}把 ${amount} 張 Blight 洗入${this.s.players[t.owner].name}的牌庫`);
+      return 0;
+    }
     let overkill = false;
     let honorableKill = false;
     if (isHero(t)) {
@@ -1439,6 +1475,12 @@ export class Game {
       if (src.poisonous) t.dead = true;
     }
     this.fx({ kind: 'damage', uid: t.uid, amount, from: src.uid ?? undefined, cardId: src.cardId, player: src.owner });
+    if (t.owner === this.s.current) {
+      const owner = this.s.players[t.owner];
+      const seen = (owner.damagedFriendlyUidsThisTurn ??= []);
+      if (!seen.includes(t.uid)) seen.push(t.uid);
+      if (seen.length >= 4) yield* this.summonWarptooths(owner);
+    }
     if (src.freeze) this.freeze(t);
     if (src.lifesteal) yield* this.heal(this.s.players[src.owner].hero.uid, amount);
     yield* this.emit({ k: 'damaged', player: t.owner, subject: t.uid, amount, isHero: isHero(t) });
@@ -1550,6 +1592,7 @@ export class Game {
       }
       return null;
     }
+    card.enteredTurn = this.s.turn;
     const def = this.handDef(card);
     if (def.shatter && !card.shatterCombined && p.hand.length <= MAX_HAND - 2) {
       const left: HandCard = { ...structuredClone(card), cardId: def.shatter.left, shatterCombined: undefined };
@@ -2778,7 +2821,13 @@ export class Game {
         else if (e.target.t === 'self') cardId = ctx.sourceCardId;
         else if (ctx.it?.kind === 'hand') cardId = this.handCard(ctx.it.uid)?.card.cardId ?? null;
         else if (ctx.itCardId) cardId = ctx.itCardId;
-        if (cardId) for (let i = 0; i < e.count; i++) this.addToHand(me, cardId);
+        if (cardId) {
+          const enemySource = !!c && !isHero(c) && c.owner !== ctx.controller;
+          for (let i = 0; i < e.count; i++) {
+            const h = this.addToHand(me, cardId);
+            if (h && enemySource) h.copiedFromOpponent = true;
+          }
+        }
         break;
       }
       case 'discover': {
@@ -3689,6 +3738,72 @@ export class Game {
         this.recalcAuras();
         break;
       }
+      case 'wantedPoster': {
+        const opts = this.discoverOptions({ type: 'MINION', minCost: 5 }, ctx.controller);
+        if (!opts.length) break;
+        const id = yield* this.choose(ctx, opts, '發現一個 5 費以上的手下');
+        const h = this.addToHand(me, id);
+        if (h) h.grantedPrepare = true;
+        break;
+      }
+      case 'infestScullery': {
+        const tier = Math.max(1, Math.min(10, 2 + (me.heroAttacksThisGame ?? 0)));
+        const pool = this.randomPool({ type: 'MINION', cost: tier }, ctx.controller, false);
+        for (let i = 0; i < 2; i++) {
+          const card = pick(s, pool);
+          if (card) yield* this.summon(me.id, card.id);
+        }
+        break;
+      }
+      case 'ratBurglar': {
+        const stolen = foe.hand.filter((h) => h.enteredTurn === s.turn);
+        for (const h of stolen) {
+          foe.hand.splice(foe.hand.indexOf(h), 1);
+          this.enterHandCard(me, h);
+        }
+        if (stolen.length) this.log(me.id, `${this.name('JAIL_205')}偷走了 ${stolen.length} 張牌`);
+        break;
+      }
+      case 'drawGeneratedSpell': {
+        const candidates = me.deck.filter((h) => getCard(h.cardId).type === 'SPELL' && !h.startedInDeck);
+        const h = pick(s, candidates);
+        if (h) {
+          me.deck.splice(me.deck.indexOf(h), 1);
+          this.enterHandCard(me, h);
+        }
+        break;
+      }
+      case 'mindSweeper': {
+        if (ctx.sourceHandCard?.opponentCopyPlayedSeen) {
+          yield* this.runEffects([{ e: 'damage', target: { t: 'all', filter: { type: 'minion', side: 'enemy' } }, amount: 2 }], ctx);
+        }
+        break;
+      }
+      case 'discountCopiedOpponent': {
+        for (const h of me.hand) if (h.copiedFromOpponent) h.costMod -= 1;
+        break;
+      }
+      case 'rampagingHound': {
+        const self = ctx.sourceUid !== null ? this.minion(ctx.sourceUid) : null;
+        if (!self) break;
+        for (const enemy of [...foe.board]) {
+          if (!this.alive(enemy) || (enemy.dormantTurns ?? 0) > 0 || !this.alive(self)) continue;
+          const enemyAtk = this.atkOf(enemy);
+          const selfAtk = this.atkOf(self);
+          yield* this.damage(this.charSource(enemy), self.uid, enemyAtk);
+          if (selfAtk > 0 && this.alive(enemy)) yield* this.damage(this.charSource(self), enemy.uid, selfAtk);
+          yield* this.processDeaths();
+        }
+        break;
+      }
+      case 'impGangStooge': {
+        // 「put on bottom」不是 shuffle；陣列 index 0 是牌庫底部。
+        me.deck.unshift(this.newHandCard('JAIL_399t1'), this.newHandCard('JAIL_399t1'));
+        break;
+      }
+      case 'enableSorry':
+        me.canSaySorry = true;
+        break;
       case 'counter':
         this.spellCountered = true;
         break;
