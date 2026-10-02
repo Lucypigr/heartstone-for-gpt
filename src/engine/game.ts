@@ -441,10 +441,31 @@ export class Game {
     return this.s.players[p].board.reduce((sum, m) => sum + (m.silenced ? 0 : m.spellDamage), 0);
   }
 
-  /** 手牌的卡牌定義（殭屍獸會合成兩個部位） */
+  /** 手牌的卡牌定義（殭屍獸、賄賂強化的二選一會在這裡動態合成） */
   handDef(hc: HandCard): CardDef {
     if (hc.starship) return starshipDef(hc.cardId, hc.starship);
-    return hc.parts ? zombeastDef(hc.parts) : getCard(hc.cardId);
+    if (hc.parts) return zombeastDef(hc.parts);
+    const base = getCard(hc.cardId);
+    if (!hc.chooseOneCombined || !base.chooseOne?.length) return base;
+
+    // Noxious Bribe：把二選一的兩個選項合併成一張卡。
+    // 若選項是變身型手下，合併兩個變體的較高數值、關鍵字與能力。
+    const variants = base.chooseOne
+      .map((o) => (o.transformInto ? getCard(o.transformInto) : null))
+      .filter((x): x is CardDef => !!x);
+    const abilities = [...(base.abilities ?? []), ...base.chooseOne.flatMap((o) => o.abilities), ...variants.flatMap((v) => v.abilities ?? [])];
+    const auras = [...(base.auras ?? []), ...variants.flatMap((v) => v.auras ?? [])];
+    const keywords = [...new Set([...(base.keywords ?? []), ...variants.flatMap((v) => v.keywords ?? [])])];
+    return {
+      ...base,
+      chooseOne: undefined,
+      target: base.chooseOne.find((o) => o.target)?.target ?? base.target,
+      attack: Math.max(base.attack ?? 0, ...variants.map((v) => v.attack ?? 0)),
+      health: Math.max(base.health ?? 0, ...variants.map((v) => v.health ?? 0)),
+      abilities: abilities.length ? abilities : undefined,
+      auras: auras.length ? auras : undefined,
+      keywords: keywords.length ? keywords : undefined,
+    };
   }
 
   /** 場上手下的卡牌定義 */
@@ -3015,6 +3036,46 @@ export class Game {
           me.voidDeck = [];
         }
         this.log(me.id, `${me.name}把 ${me.voidDeck.length} 張牌送入了虛無`);
+        break;
+      }
+      case 'darkBribe': {
+        const drawn = yield* this.draw(me, 3);
+        if (!drawn.length) break;
+        const chosenId = yield* this.choose(ctx, drawn.map((h) => h.cardId), '選一張牌交給對手');
+        const card = drawn.find((h) => h.cardId === chosenId);
+        if (!card) break;
+        const i = me.hand.findIndex((h) => h.uid === card.uid);
+        if (i >= 0) {
+          me.hand.splice(i, 1);
+          this.enterHandCard(foe, card);
+          this.log(me.id, `${me.name}把${this.name(card.cardId)}交給了對手`);
+        }
+        break;
+      }
+      case 'noxiousBribe': {
+        const chooseCards = poolCards({}, me.heroClass, foe.heroClass).filter((c) => !!c.chooseOne?.length);
+        const options = this.discoverOptions({}, me.id, chooseCards);
+        if (!options.length) break;
+        const cardId = yield* this.choose(ctx, options, '發現一張二選一卡牌');
+        const mine = this.addToHand(me, cardId);
+        if (mine) mine.chooseOneCombined = true;
+        this.addToHand(foe, cardId); // 對手拿到的是沒有強化的普通版本
+        break;
+      }
+      case 'desperateBribe': {
+        const mine: number[] = [];
+        for (const pid of [me.id, foe.id] as PlayerId[]) {
+          for (let i = 0; i < 2; i++) {
+            const card = pick(s, this.randomPool({ type: 'MINION', cost: 2 }, pid, false));
+            if (!card) continue;
+            const m = yield* this.summon(pid, card.id);
+            if (m && pid === me.id) mine.push(m.uid);
+          }
+        }
+        for (const uid of mine) {
+          const card = pick(s, this.randomPool({ type: 'MINION', cost: 3 }, me.id, false));
+          if (card && this.minion(uid)) this.transform(uid, card.id);
+        }
         break;
       }
       case 'counter':
