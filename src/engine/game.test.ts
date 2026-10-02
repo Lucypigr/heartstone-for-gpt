@@ -1642,3 +1642,65 @@ describe('腐化', () => {
     expect(g.s.players[0].weapon?.cardId).toBe('DMF_248t');
   });
 });
+
+
+describe('2026：紫羅蘭堡批次復原（三）', () => {
+  it('Sinful Steed 會以完整生命與死亡前附魔重生', () => {
+    const g = newGame();
+    const steed = put(g, 'CAP_800', 0);
+    steed.atkBuff = 2;
+    steed.maxHp += 2;
+    steed.hp = 1;
+    play(g, 'CS2_029', steed.uid);
+    const reborn = g.s.players[0].board.find((m) => m.cardId === 'CAP_800')!;
+    expect(reborn).toBeTruthy();
+    expect(g.atkOf(reborn)).toBe((getCard('CAP_800').attack ?? 0) + 2);
+    expect(reborn.hp).toBe(reborn.maxHp);
+    expect(g.hasKw(reborn, 'REBORN')).toBe(false);
+  });
+
+  it('Jailhouse Manastorm 戰吼後，每次施放法術會召喚同費手下', () => {
+    const g = newGame();
+    play(g, 'JAIL_122');
+    const before = g.s.players[0].board.length;
+    play(g, 'CS2_029', g.s.players[1].hero.uid);
+    expect(g.s.players[0].board.length).toBe(before + 1);
+    expect(getCard(g.s.players[0].board.at(-1)!.cardId).cost).toBe(4);
+  });
+
+  it('Jailbird 在手牌中會跟著 Prepare 的折扣量降費', () => {
+    const g = newGame();
+    const jailbirdUid = give(g, 'JAIL_453');
+    const prepareUid = give(g, 'JAIL_444');
+    const p = g.s.players[0];
+    const jailbird = p.hand.find((h) => h.uid === jailbirdUid)!;
+    const before = g.costOf(p, jailbird);
+    p.mana = 2;
+    expect(g.apply({ type: 'prepare', handUid: prepareUid })).toBe(true);
+    expect(g.costOf(p, jailbird)).toBe(Math.max(0, before - 3));
+  });
+
+  it('Blackpaw Whip 每持有一枚幸運幣就少 1 費', () => {
+    const g = newGame();
+    const uid = give(g, 'JAIL_503');
+    const p = g.s.players[0];
+    const whip = p.hand.find((h) => h.uid === uid)!;
+    const base = g.costOf(p, whip);
+    p.hand.push(g.newHandCard('GAME_005'), g.newHandCard('GAME_005'));
+    expect(g.costOf(p, whip)).toBe(Math.max(0, base - 2));
+  });
+
+  it('Chef Neth\'rek 的開局條件成立時，第五個自己的回合把法力設為 10', () => {
+    const deck = ['JAIL_860', ...Array(29).fill('GAME_005')];
+    const g = newGame({ deck });
+    const p = g.s.players[0];
+    expect(p.mana10AfterTurns).toBe(4);
+    for (let i = 0; i < 4; i++) {
+      g.apply({ type: 'endTurn' });
+      g.apply({ type: 'endTurn' });
+    }
+    expect(p.maxMana).toBe(10);
+    expect(p.mana).toBe(10);
+    expect(p.mana10AfterTurns).toBeUndefined();
+  });
+});
