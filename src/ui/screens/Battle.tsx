@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { getCard, hasCard, HEROES } from '../../cards/registry';
 import { AiBrain, aiMulligan, chooseAction, EMOTE_NAMES, EMOTE_TEXT, type Emote } from '../../engine/ai';
-import { Game, isHero } from '../../engine/game';
+import { Game } from '../../engine/game';
 import { CLASS_NAMES } from '../../engine/heroes';
 import type { Action, Hero, Minion, PlayerId, PlayerState } from '../../engine/state';
 import type { CardDef } from '../../engine/types';
