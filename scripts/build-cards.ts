@@ -101,7 +101,6 @@ const UNSUPPORTED_TAGS = [
   'START_OF_GAME_KEYWORD',
   'IMBUE',
   'DISGUISED',
-  'SHATTER',
   'KINDRED',
   'REWIND',
   'EMPOWER',
@@ -130,13 +129,6 @@ async function main() {
     if (!en) continue;
     if (!byName.has(en)) byName.set(en, []);
     byName.get(en)!.push(r);
-  }
-
-  for (const root of ['CATA_134', 'CATA_306', 'CATA_479', 'CATA_489', 'CATA_820']) {
-    console.log('SHATTERDBG', root);
-    for (const r of raws.filter((x) => x.id.startsWith(root))) {
-      console.log('SHATTERDBGROW', r.id, JSON.stringify(r.tags), JSON.stringify(r.strs.CARDNAME?.enUS ?? ''), JSON.stringify(r.strs.CARDTEXT?.enUS ?? ''));
-    }
   }
 
   const typeOf = (r: RawCard) => TYPE_MAP[r.tags.CARDTYPE];
@@ -262,6 +254,24 @@ async function main() {
       cost: r.tags.COST ?? 0,
       collectible,
     };
+    if (r.tags.SHATTER) {
+      const parts = raws
+        .filter((x) => x.id !== r.id && x.id.startsWith(r.id) && !!x.tags.SHATTERED && typeOf(x) === type)
+        .sort((a, b) => a.id.localeCompare(b.id) || a.dbf - b.dbf);
+      if (parts.length < 2) {
+        if (collectible) failures.push({ id: r.id, name: r.strs.CARDNAME.enUS, set: r.tags.CARD_SET, reason: '找不到完整碎裂半片' });
+        return null;
+      }
+      const left = buildToken(parts[0].id);
+      const right = buildToken(parts[1].id);
+      if (!left || !right) {
+        if (collectible) failures.push({ id: r.id, name: r.strs.CARDNAME.enUS, set: r.tags.CARD_SET, reason: '碎裂半片無法解析' });
+        return null;
+      }
+      def.shatter = { left: left.id, right: right.id };
+      left.shatteredFrom = { root: r.id, side: 'left' };
+      right.shatteredFrom = { root: r.id, side: 'right' };
+    }
     if (r.tags.CORRUPT) {
       const target = corruptTargetOf(r);
       if (target) {
@@ -384,6 +394,10 @@ async function main() {
         if (def.prepare) {
           // 先正規化再移除，避免 CardDefs 的粗體、換行、逗點等標記差異。
           stageText = normalizeText(stageText).replace(/^Prepare(?:[,:.]\s*|\s+)/i, '').trim();
+        }
+        if (r.tags.SHATTER || r.tags.SHATTERED) {
+          // Shatter / Shattered 描述的是手牌形態，不是施放效果。
+          stageText = normalizeText(stageText).replace(/^Shatter(?:ed)?(?:[,:.]\s*|\s+)/i, '').trim();
         }
         parsed = parseCardText({ textEn: stageText, cardType: type }, makeEnv(r.id));
       }
