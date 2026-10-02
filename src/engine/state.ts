@@ -45,6 +45,16 @@ export interface HandCard {
   /** Follow：本回合附加在此牌上的出牌效果 */
   grantedPlayEffects?: Effect[];
   grantedPlayEffectsTurn?: number;
+  /** Wanted Poster：這張手牌被額外賦予 Prepare。 */
+  grantedPrepare?: boolean;
+  /** 這張實體是否來自開局牌組（Smuggled Shovel / Godfrey）。 */
+  startedInDeck?: boolean;
+  /** 這張牌進入目前手牌的遊戲回合（Rat Burglar）。 */
+  enteredTurn?: number;
+  /** 這張卡是從對手的卡牌複製而來（Azalina / Priest 套件）。 */
+  copiedFromOpponent?: boolean;
+  /** 持有期間曾打出過對手卡牌的複製（Mind Sweeper / Unshackle Soul）。 */
+  opponentCopyPlayedSeen?: boolean;
 }
 
 export interface Minion {
@@ -197,6 +207,12 @@ export interface PlayerState {
   cardsPlayedThisTurn: number;
   spellsCastThisGame: number;
   heroAttackedThisTurn: boolean;
+  /** 本場英雄總攻擊次數（Infest the Scullery）。 */
+  heroAttacksThisGame?: number;
+  /** 本回合曾受到傷害的不同友方角色 UID（Warptooth）。 */
+  damagedFriendlyUidsThisTurn?: number[];
+  /** Gullible Guard 解鎖的 Sorry 表情旗標。 */
+  canSaySorry?: boolean;
   elementalLastTurn: boolean;
   elementalThisTurn: boolean;
   mulliganDone: boolean;
