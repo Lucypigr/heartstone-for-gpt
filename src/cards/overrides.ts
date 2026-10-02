@@ -213,6 +213,42 @@ export const OVERRIDES: Record<string, Override> = {
   // 殭屍獸本體（數值與效果由兩個部位合成，見 src/cards/zombeast.ts）
   ICC_828t: {},
 
+  // ------------------------------------------------------------------ 2026《浩劫與重生》：補完全部碎裂主卡
+  // Wildwood Circle：召喚兩個 2/2 Treant；再賦予你的手下「亡語：召喚一個 2/2 Treant」
+  CATA_134: {
+    abilities: play(
+      { e: 'summon', card: 'CATA_134t3', count: 2, who: 'self' },
+      { e: 'buff', target: allFriendly, abilities: dr({ e: 'summon', card: 'CATA_134t3', count: 1, who: 'self' }) },
+    ),
+    tokens: ['CATA_134t3'],
+  },
+  CATA_134t: {
+    abilities: play({ e: 'summon', card: 'CATA_134t3', count: 2, who: 'self' }),
+    tokens: ['CATA_134t3'],
+  },
+  CATA_134t2: {
+    abilities: play({ e: 'buff', target: allFriendly, abilities: dr({ e: 'summon', card: 'CATA_134t3', count: 1, who: 'self' }) }),
+    tokens: ['CATA_134t3'],
+  },
+
+  // Schism：先給友方手下 +2/+3 與 Elusive，再召喚它的複製。
+  // combined 版本必須先加 Elusive 再複製；因為目標早已選定，引擎不會被新增的 Elusive 擋掉。
+  CATA_306: {
+    target: friendlyMinion,
+    abilities: play(
+      { e: 'buff', target: { t: 'chosen' }, atk: 2, hp: 3, keywords: ['ELUSIVE'] },
+      { e: 'summonCopy', target: { t: 'chosen' }, count: 1 },
+    ),
+  },
+  CATA_306t1: {
+    target: friendlyMinion,
+    abilities: play({ e: 'buff', target: { t: 'chosen' }, atk: 2, hp: 3, keywords: ['ELUSIVE'] }),
+  },
+  CATA_306t2: {
+    target: friendlyMinion,
+    abilities: play({ e: 'summonCopy', target: { t: 'chosen' }, count: 1 }),
+  },
+
   // ------------------------------------------------------------------ 死亡騎士：屍體
   // 屍爆術：引爆一具屍體對所有手下造成 1 點傷害，若還有手下存活就重複
   RLK_035: { abilities: play({ e: 'custom', fn: 'corpseExplosion' }) },
