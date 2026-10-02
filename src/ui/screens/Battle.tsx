@@ -315,11 +315,17 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
       return;
     }
     const can = g.canPlay(handUid);
-    if (!can.ok) {
-      flash(can.reason ?? '無法打出');
+    const canPrep = g.canPrepare(handUid);
+    if (!can.ok && !canPrep.ok) {
+      flash(can.reason ?? canPrep.reason ?? '無法操作');
       return;
     }
     setInspect(null);
+    // 不能直接打、但可以預備時，先選中這張牌並顯示預備操作。
+    if (!can.ok && canPrep.ok) {
+      setMode({ k: 'card', handUid, stage: 'select' });
+      return;
+    }
     if (def.chooseOne) setMode({ k: 'card', handUid, stage: 'choose' });
     else if (def.type === 'MINION') setMode({ k: 'card', handUid, stage: 'place' });
     else if (needsTarget(handUid)) setMode({ k: 'card', handUid, stage: 'target' });
@@ -394,6 +400,8 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
   const selectedHand = mode.k === 'card' ? mode.handUid : null;
   const selectedCard = selectedHand !== null ? (me.hand.find((h) => h.uid === selectedHand) ?? null) : null;
   const canTrade = selectedHand !== null && g.check({ type: 'trade', handUid: selectedHand }).ok;
+  const canPrepare = selectedHand !== null && g.check({ type: 'prepare', handUid: selectedHand }).ok;
+  const prepareSpend = selectedCard && canPrepare ? Math.min(me.mana, Math.max(1, g.costOf(me, selectedCard) - 1)) : 0;
   const selectedDef = selectedCard ? g.handDef(selectedCard) : null;
   const selectedStats = selectedCard && selectedDef?.type === 'MINION' ? g.handStats(ME, selectedCard) : null;
   const placing = mode.k === 'card' && mode.stage === 'place';
@@ -609,7 +617,7 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
               <PressableCardSurface
                 key={h.uid}
                 handUid={h.uid}
-                className={`hand-slot ${selectedHand === h.uid ? 'selected' : ''} ${h.echo ? 'echo-copy' : ''}`}
+                className={`hand-slot ${selectedHand === h.uid ? 'selected' : ''} ${h.echo ? 'echo-copy' : ''} ${h.prepared ? 'prepared-card' : ''}`}
                 style={{ '--i': i } as CSSProperties}
                 title={h.echo ? '回音的複製：只能在本回合使用' : undefined}
                 onClick={() => onHandClick(h.uid)}
@@ -638,6 +646,7 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
                   selected={selectedHand === h.uid}
                 />
                 {echo && <span className="echo-badge">回音</span>}
+                {h.prepared && <span className="prepare-badge" title="已預備；預備當回合不能打出">🔒 預備</span>}
                 {g.costKind(me, h) !== 'mana' && (
                   <span className={`cost-kind ${g.costKind(me, h)}`} title={g.costKind(me, h) === 'health' ? '消耗生命值而不是法力' : '消耗屍體而不是法力'}>
                     {g.costKind(me, h) === 'health' ? '❤' : '💀'}
@@ -682,10 +691,19 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
         </div>
       )}
       {toast && <div className="toast">{toast}</div>}
-      {canTrade && selectedHand !== null && (
-        <button className="btn trade-btn" onClick={() => act({ type: 'trade', handUid: selectedHand })}>
-          🔁 交易（1 法力：洗回牌堆並抽一張）
-        </button>
+      {(canTrade || canPrepare) && selectedHand !== null && (
+        <div className="hand-action-buttons" onClick={(e) => e.stopPropagation()}>
+          {canPrepare && (
+            <button className="btn prepare-btn" onClick={() => act({ type: 'prepare', handUid: selectedHand })}>
+              🗝 預備（投入 {prepareSpend} 法力，降低 {prepareSpend + 1}）
+            </button>
+          )}
+          {canTrade && (
+            <button className="btn trade-btn" onClick={() => act({ type: 'trade', handUid: selectedHand })}>
+              🔁 交易（1 法力：洗回牌堆並抽一張）
+            </button>
+          )}
+        </div>
       )}
       {turnBanner > 0 && (
         <div className="turn-banner" key={`turn-${turnBanner}`}>
@@ -979,6 +997,7 @@ function Glossary({ cardId, minion, g }: { cardId: string; minion: Minion | null
     lines.push(`符文：套牌需要 ${need}（一副套牌最多 3 個符文）`);
   }
   if (def.castsWhenDrawn) lines.push('抽中時施放：抽到這張牌時會立即施放，然後再抽一張牌');
+  if (def.prepare) lines.push('預備：至少有 1 點剩餘法力時，可投入法力讓此牌永久降低投入量 +1 的消耗；只能預備一次，且本回合不能打出');
   if (def.costsHealth) lines.push('消耗生命值而不是法力（生命值不夠就不能打出）');
   if (def.costsHealthIf) lines.push('條件成立時改為消耗生命值而不是法力');
   if (def.costsCorpses) lines.push('消耗屍體而不是法力');
