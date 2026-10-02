@@ -90,6 +90,8 @@ export interface Minion {
   sleeping: boolean;
   /** 本回合被召喚（突襲判定用） */
   summonedTurn: number;
+  /** Ancient Augur：戰吼暗中標記的對手手牌 UID */
+  markedHandUid?: number;
   /** 紫羅蘭堡休眠：還要經過幾個擁有者回合才甦醒。休眠中不能被互動或觸發能力。 */
   dormantTurns?: number;
   attacks: number;
@@ -219,6 +221,8 @@ export interface PlayerState {
   damagedFriendlyUidsThisTurn?: number[];
   /** Gullible Guard 解鎖的 Sorry 表情旗標。 */
   canSaySorry?: boolean;
+  /** Inspector Murloc Holmes：監看對手下一回合是否打出指定名稱 */
+  holmesWatches?: { cardName: string; turn: number }[];
   elementalLastTurn: boolean;
   elementalThisTurn: boolean;
   mulliganDone: boolean;
