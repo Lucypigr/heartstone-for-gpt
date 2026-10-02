@@ -37,6 +37,19 @@ export const OVERRIDES: Record<string, Override> = {
     startOfGame: [{ e: 'custom', fn: 'duplicateOtherLegendariesInDeck' }],
     startOfGameLast: true,
   },
+  // 血腥醫生薩蕾娜：戰吼解鎖第二英雄能力「吸血鬼之吻」，每回合獨立使用一次並消耗 3 屍體。
+  JAIL_446: {
+    abilities: play(fn('grantSecondaryHeroPower')),
+    secondaryHeroPower: {
+      id: 'JAIL_446hp',
+      name: '吸血鬼之吻',
+      text: '賦予一個手下+3攻擊力。此能力消耗屍體而非法力。',
+      cost: 3,
+      costKind: 'corpses',
+      target: { filter: { type: 'minion', side: 'any' } },
+      effects: [{ e: 'buff', target: { t: 'chosen' }, atk: 3 }],
+    },
+  },
   // 動物夥伴：隨機召喚米莎、雷歐克或霍弗
   NEW1_031: {
     abilities: [{ on: { k: 'play' }, effects: [{ e: 'custom', fn: 'summonOneOf', args: { cards: ['NEW1_032', 'NEW1_033', 'NEW1_034'] } }] }],
