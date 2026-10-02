@@ -1063,3 +1063,55 @@ describe('榮譽擊殺', () => {
     expect(over.atkOf(buffedPrivate)).toBe(5);
   });
 });
+
+
+describe('腐化', () => {
+  it('只有打出更高目前費用的卡才腐化；同費不會', () => {
+    const g = newGame();
+    const targetUid = give(g, 'DMF_073');
+    const target = g.handCard(targetUid)!.card;
+
+    const sameCostUid = give(g, 'DMF_073');
+    expect(g.apply({ type: 'play', handUid: sameCostUid })).toBe(true);
+    expect(target.cardId).toBe('DMF_073');
+
+    g.s.players[0].mana = 10;
+    const higherUid = give(g, 'CS2_182'); // 冰風雪人：4 費
+    expect(g.apply({ type: 'play', handUid: higherUid })).toBe(true);
+    expect(target.cardId).toBe('DMF_073t');
+    expect(g.handDef(target).keywords).toEqual(expect.arrayContaining(['DIVINE_SHIELD', 'RUSH']));
+  });
+
+  it('使用目前費用判定，並保留手牌上的費用與數值增益', () => {
+    const g = newGame();
+    const targetUid = give(g, 'DMF_073');
+    const target = g.handCard(targetUid)!.card;
+    target.costMod = -1; // 目前 2 費
+    target.atkBuff = 2;
+    target.hpBuff = 3;
+
+    const triggerUid = give(g, 'DMF_073'); // 3 費 > 目前 2 費
+    expect(g.apply({ type: 'play', handUid: triggerUid })).toBe(true);
+
+    expect(target.cardId).toBe('DMF_073t');
+    expect(target.costMod).toBe(-1);
+    expect(target.atkBuff).toBe(2);
+    expect(target.hpBuff).toBe(3);
+    expect(g.costOf(g.s.players[0], target)).toBe(2);
+  });
+
+  it('腐化可以把手下真正變成武器並正常裝備', () => {
+    const g = newGame();
+    const execUid = give(g, 'DMF_248');
+    const exec = g.handCard(execUid)!.card;
+
+    const higherUid = give(g, 'CS2_182'); // 4 費 > 3 費
+    expect(g.apply({ type: 'play', handUid: higherUid })).toBe(true);
+    expect(exec.cardId).toBe('DMF_248t');
+    expect(g.handDef(exec).type).toBe('WEAPON');
+
+    g.s.players[0].mana = 10;
+    expect(g.apply({ type: 'play', handUid: execUid })).toBe(true);
+    expect(g.s.players[0].weapon?.cardId).toBe('DMF_248t');
+  });
+});
