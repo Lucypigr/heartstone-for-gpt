@@ -1766,7 +1766,10 @@ export class Game {
         continue;
       }
       const entered = this.enterHandCard(p, card);
-      if (!entered) continue;
+      if (!entered) {
+        if (card.cardId === 'JAIL_398') yield* this.impfernalOffboard(p.id);
+        continue;
+      }
       drawn.push(entered);
       p.drawnThisTurn++;
       this.fx({ kind: 'draw', uid: entered.uid, player: p.id });
@@ -2175,6 +2178,7 @@ export class Game {
           if (m.keywords.includes('REBORN')) {
             const r = yield* this.summon(m.owner, m.cardId, ctx.position);
             if (r) {
+              (p.rebornThisGame ??= []).push(m.cardId);
               if (getCard(m.cardId).fullRebornEnchantments) {
                 this.copyStats(m, r);
                 r.keywords = r.keywords.filter((k) => k !== 'REBORN');
@@ -3004,6 +3008,7 @@ export class Game {
           const [c] = me.hand.splice(idx, 1);
           this.recombineShatter(me);
           this.log(me.id, `${me.name}棄掉了${this.name(c.cardId)}`);
+          if (c.cardId === 'JAIL_398') yield* this.impfernalOffboard(me.id);
         }
         this.returnGodfreyOverdraw(me);
         break;
@@ -3248,6 +3253,15 @@ export class Game {
     m.attacks = old.attacks;
     p.board[idx] = m;
     this.recalcAuras();
+  }
+
+  /** IMPFERNAL! 在手牌/牌庫被摧毀時也會觸發同一個亡語。 */
+  private *impfernalOffboard(owner: PlayerId): Gen {
+    const ctx: Ctx = { ...this.baseCtx(owner), sourceCardId: 'JAIL_398' };
+    yield* this.runEffects([
+      { e: 'damage', target: { t: 'all', filter: { type: 'character', side: 'any' } }, amount: 3 },
+    ], ctx);
+    yield* this.processDeaths();
   }
 
   // ==========================================================================
@@ -3780,6 +3794,61 @@ export class Game {
         if (me.graveyard.filter((id) => id === ctx.sourceCardId).length < 5) break;
         const target = pick(s, this.chars().filter((x) => this.alive(x) && x.owner !== ctx.controller));
         if (target) yield* this.damage({ owner: ctx.controller, uid: null, cardId: 'CS2_029' }, target.uid, 6 + this.spellDamage(ctx.controller));
+        break;
+      }
+      case 'skeletonKey': {
+        // 三張法術 +「刷新」。刷新可以無限重複；每次有 20% 機率受到 5 點外部傷害。
+        for (let guard = 0; guard < 50 && !this.over; guard++) {
+          const spells = this.discoverOptions({ type: 'SPELL' }, ctx.controller);
+          if (!spells.length) break;
+          const options = [...spells, 'VH_SKELETON_REFRESH'];
+          const id = yield* this.choose(ctx, options, '發現一張法術，或刷新選項');
+          if (id !== 'VH_SKELETON_REFRESH') {
+            this.addToHand(me, id);
+            break;
+          }
+          if (nextRandom(s) < 0.2) {
+            yield* this.damage({ owner: me.id, uid: null, cardId: ctx.sourceCardId }, me.hero.uid, 5);
+            if (this.over) return;
+          }
+        }
+        break;
+      }
+      case 'slimeEm': {
+        const mine = me.board.filter((m) => this.alive(m)).map((m) => m.cardId);
+        const theirs = foe.board.filter((m) => this.alive(m)).map((m) => m.cardId);
+        for (const m of [...me.board, ...foe.board]) if (this.alive(m)) m.dead = true;
+        yield* this.processDeaths();
+        if (this.over) return;
+        const mySpell = this.newHandCard('VH_ECTOPLASM');
+        mySpell.ectoplasmMinions = mine;
+        this.enterHandCard(me, mySpell);
+        const theirSpell = this.newHandCard('VH_ECTOPLASM');
+        theirSpell.ectoplasmMinions = theirs;
+        this.enterHandCard(foe, theirSpell);
+        break;
+      }
+      case 'ectoplasm': {
+        const list = ctx.sourceHandCard?.ectoplasmMinions ?? [];
+        for (const id of list) {
+          if (me.board.length >= MAX_BOARD) break;
+          yield* this.doSummon(ctx, me.id, id);
+        }
+        break;
+      }
+      case 'raithVanGeist': {
+        for (const id of me.rebornThisGame ?? []) {
+          if (me.board.length >= MAX_BOARD) break;
+          const summoned = yield* this.doSummon(ctx, me.id, id);
+          if (!summoned) continue;
+          const target = pick(s, foe.board.filter((m) => this.alive(m) && (m.dormantTurns ?? 0) <= 0));
+          if (target && this.alive(summoned)) {
+            summoned.sleeping = false;
+            yield* this.doAttack(summoned.uid, target.uid);
+            yield* this.processDeaths();
+            if (this.over) return;
+          }
+        }
         break;
       }
       case 'ancientAugur': {
