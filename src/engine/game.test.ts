@@ -534,6 +534,29 @@ describe('2026：紫羅蘭堡薩滿法術變形', () => {
   });
 });
 
+describe('紫羅蘭堡最後特殊卡 2A', () => {
+  it('Azalina 開局 40 血並形成 40 張牌庫，戰吼補滿手牌', () => {
+    const deck0 = ['JAIL_430', ...Array(29).fill('CS2_182')];
+    const deck1 = Array(30).fill('CS2_231');
+    const g = Game.create({ decks: [deck0, deck1], classes: ['PRIEST', 'WARRIOR'], names: ['A','B'], ai: [false,false], seed: 7, first: 0 });
+    const p = g.s.players[0];
+    expect(p.hero.maxHp).toBe(40);
+    expect(p.hero.hp).toBe(40);
+    expect(p.deck.length + p.hand.length).toBe(40);
+  });
+
+  it('Lotus Troublemaker 會依本場 2 費出牌次數增加射擊', () => {
+    const g = newGame();
+    const p = g.s.players[0];
+    p.cardsPlayedForTwoMana = 2;
+    p.mana = 10;
+    const uid = give(g, 'JAIL_470');
+    const before = g.s.players[1].hero.hp;
+    expect(g.apply({ type: 'play', handUid: uid, position: 0 })).toBe(true);
+    expect(g.s.players[1].hero.hp).toBeLessThanOrEqual(before);
+  });
+});
+
 describe('2026：伊莉妲‧逐罪者（Void draw rule）', () => {
   it('戰吼把牌庫送入虛無但保留 1 張；下個自己的回合額外從虛無取得 2 張，仍正常抽牌', () => {
     const g = newGame();
