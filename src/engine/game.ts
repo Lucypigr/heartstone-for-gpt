@@ -1348,8 +1348,8 @@ export class Game {
   }
 
   /**
-   * 碎裂牌進入手牌：左半片放最左、右半片放最右。
-   * 10 張滿手時原卡直接燒掉；9 張時左半片佔第 10 格、右半片燒掉。
+   * 碎裂牌進入手牌：若加入後仍有空位，左半片放最左、右半片放最右。
+   * 官方規則：若這張牌進手後會讓手牌滿到 10 張，則不碎裂，保留完整原卡。
    */
   private enterHandCard(p: PlayerState, card: HandCard, showBurn = true): HandCard | null {
     if (p.hand.length >= MAX_HAND) {
@@ -1360,15 +1360,11 @@ export class Game {
       return null;
     }
     const def = this.handDef(card);
-    if (def.shatter && !card.shatterCombined) {
+    if (def.shatter && !card.shatterCombined && p.hand.length <= MAX_HAND - 2) {
       const left: HandCard = { ...structuredClone(card), cardId: def.shatter.left, shatterCombined: undefined };
       const right: HandCard = { ...structuredClone(card), uid: this.uid(), cardId: def.shatter.right, shatterCombined: undefined };
       p.hand.unshift(left);
-      if (p.hand.length < MAX_HAND) p.hand.push(right);
-      else {
-        this.log(p.id, `${p.name}的手牌已滿，${this.name(right.cardId)}被燒掉了`);
-        this.fx({ kind: 'burn', cardId: right.cardId, player: p.id });
-      }
+      p.hand.push(right);
       this.log(p.id, `${this.name(def.id)}碎裂成左右兩半`);
       this.recombineShatter(p);
       return p.hand.find((h) => h.uid === card.uid) ?? null;
