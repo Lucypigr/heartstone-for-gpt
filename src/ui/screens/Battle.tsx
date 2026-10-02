@@ -49,6 +49,7 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
     const aiDeck = ladder ? ladder.deck : makeAiDeck(config.oppClass, config.difficulty, Math.floor(Math.random() * 1e9));
     const g = Game.create({
       decks: [deck.cards, aiDeck],
+      sideboards: [deck.sideboards, undefined],
       classes: [deck.heroClass, config.oppClass],
       names: ['你', ladder ? ladder.name : HEROES[config.oppClass].name],
       ai: [false, true],
