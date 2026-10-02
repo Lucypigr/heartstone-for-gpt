@@ -222,6 +222,10 @@ export class Game {
         overloadOwed: 0,
         overloadLocked: 0,
         deck: o.decks[id].map((cardId) => game.newHandCard(cardId)),
+        deckStartedNoSpells: o.decks[id].every((cardId) => getCard(cardId).type !== 'SPELL'),
+        deckStartedNoMinions: o.decks[id].every((cardId) => getCard(cardId).type !== 'MINION'),
+        deckStartedAllCostMax3: o.decks[id].every((cardId) => getCard(cardId).cost <= 3),
+        cardsPlayedForTwoMana: 0,
         hand: [],
         board: [],
         secrets: [],
@@ -557,6 +561,9 @@ export class Game {
           break;
         case 'minionsOnBoard':
           n = this.s.players[0].board.length + this.s.players[1].board.length;
+          break;
+        case 'coinsInHand':
+          n = p.hand.filter((h) => h.cardId === 'GAME_005').length;
           break;
         default:
           n = this.dyn(def.costRule.per, this.baseCtx(p.id), def.costRule.race);
@@ -935,6 +942,15 @@ export class Game {
     p.maxMana = Math.min(MAX_MANA, p.maxMana + 1);
     p.overloadLocked = p.overloadOwed;
     p.mana = Math.max(0, p.maxMana - p.overloadOwed);
+    if (p.mana10AfterTurns !== undefined) {
+      p.mana10AfterTurns--;
+      if (p.mana10AfterTurns <= 0) {
+        p.maxMana = MAX_MANA;
+        p.mana = MAX_MANA;
+        p.mana10AfterTurns = undefined;
+        this.log(p.id, `${p.name}的法力水晶被設為 10！`);
+      }
+    }
     p.overloadOwed = 0;
     p.heroPower.used = false;
     if (p.secondaryHeroPower) p.secondaryHeroPower.used = false;
@@ -1049,7 +1065,10 @@ export class Game {
     const kind = this.costKind(p, hc);
     if (kind === 'health') this.payHealth(p, cost);
     else if (kind === 'corpses') this.spendCorpses(p, cost);
-    else p.mana -= cost;
+    else {
+      p.mana -= cost;
+      if (cost === 2) p.cardsPlayedForTwoMana = (p.cardsPlayedForTwoMana ?? 0) + 1;
+    }
     if (p.nextCardCorpsesTurn === s.turn) p.nextCardCorpsesTurn = undefined;
     if (def.type === 'SPELL' && p.nextSpellDiscount?.turn === s.turn) p.nextSpellDiscount = undefined;
     p.hand.splice(idx, 1);
@@ -1203,7 +1222,11 @@ export class Game {
     const hc = p.hand.find((h) => h.uid === handUid)!;
     const spend = p.mana;
     p.mana = 0;
-    hc.prepareDiscount = (hc.prepareDiscount ?? 0) + spend + 1;
+    const discount = spend + 1;
+    hc.prepareDiscount = (hc.prepareDiscount ?? 0) + discount;
+    for (const h of p.hand) {
+      if (h.uid !== hc.uid && h.cardId === 'JAIL_453') h.costMod -= discount;
+    }
     hc.prepared = true;
     hc.preparedTurn = this.s.turn;
     this.log(p.id, `${p.name}預備了${this.name(hc.cardId)}，消耗 ${spend} 點法力並降低 ${spend + 1} 點消耗`);
@@ -2021,10 +2044,18 @@ export class Game {
           if (m.keywords.includes('REBORN')) {
             const r = yield* this.summon(m.owner, m.cardId, ctx.position);
             if (r) {
-              r.keywords = r.keywords.filter((k) => k !== 'REBORN');
-              r.baseHp = 1;
-              r.maxHp = 1 + r.auraHp;
-              r.hp = r.maxHp;
+              if (getCard(m.cardId).fullRebornEnchantments) {
+                this.copyStats(m, r);
+                r.keywords = r.keywords.filter((k) => k !== 'REBORN');
+                r.tempKeywords = r.tempKeywords.filter((k) => k !== 'REBORN');
+                r.nextTurnKeywords = r.nextTurnKeywords.filter((k) => k !== 'REBORN');
+                r.hp = r.maxHp;
+              } else {
+                r.keywords = r.keywords.filter((k) => k !== 'REBORN');
+                r.baseHp = 1;
+                r.maxHp = 1 + r.auraHp;
+                r.hp = r.maxHp;
+              }
             }
           }
         }
@@ -3317,6 +3348,278 @@ export class Game {
         }
         break;
       }
+      case 'lingeringSpirit': {
+        const hero = me.hero;
+        const missing = Math.max(0, hero.maxHp - hero.hp);
+        const healed = Math.min(3, missing);
+        if (healed > 0) yield* this.heal(hero.uid, healed);
+        const excess = 3 - healed;
+        if (excess > 0) {
+          const victim = pick(s, this.chars().filter((x) => this.alive(x) && x.owner !== ctx.controller));
+          if (victim) yield* this.damage(this.dmgSource(ctx), victim.uid, excess);
+        }
+        break;
+      }
+      case 'specterSpecialist': {
+        if (ctx.chosen === null) break;
+        const target = this.minion(ctx.chosen);
+        if (!target) break;
+        if (this.hasKw(target, 'REBORN')) {
+          const copy = yield* this.summon(ctx.controller, target.cardId);
+          if (copy) this.copyStats(target, copy);
+        } else target.keywords.push('REBORN');
+        break;
+      }
+      case 'escapeSelf': {
+        const m = ctx.sourceUid !== null ? this.minion(ctx.sourceUid) : null;
+        if (m) {
+          const owner = s.players[m.owner];
+          owner.board = owner.board.filter((x) => x.uid !== m.uid);
+          this.recalcAuras();
+          this.log(m.owner, `${this.name(m.cardId)}逃離了對戰`);
+        }
+        break;
+      }
+      case 'grantSpellEchoSummon': {
+        (me.eternal ??= []).push({
+          sourceCardId: ctx.sourceCardId,
+          ability: { on: { k: 'spellCast', side: 'friendly' }, effects: [fn('summonMinionAtSpellCost')] } as Ability,
+        });
+        break;
+      }
+      case 'summonMinionAtSpellCost': {
+        if (!ctx.itCardId || getCard(ctx.itCardId).type !== 'SPELL') break;
+        const cost = getCard(ctx.itCardId).cost;
+        const card = pick(s, this.randomPool({ type: 'MINION', cost }, ctx.controller, false));
+        if (card) yield* this.summon(ctx.controller, card.id);
+        break;
+      }
+      case 'nab': {
+        if (ctx.chosen === null) break;
+        const target = this.minion(ctx.chosen);
+        if (!target) break;
+        const cardId = target.cardId;
+        yield* this.damage(this.dmgSource(ctx), target.uid, 3 + (ctx.isSpell ? this.spellDamage(ctx.controller) : 0));
+        if (target.hp <= 0 || target.dead) {
+          const copy = this.newHandCard(cardId);
+          copy.costMod = 2 - getCard(cardId).cost;
+          me.deck.splice(randomInt(s, me.deck.length + 1), 0, copy);
+        }
+        break;
+      }
+      case 'castTwoMageSecrets': {
+        const pool = this.randomPool({ type: 'SPELL', isSecret: true, cls: 'MAGE' }, ctx.controller, false)
+          .filter((x) => !me.secrets.some((sec) => sec.cardId === x.id));
+        for (let i = 0; i < 2 && me.secrets.length < MAX_SECRETS; i++) {
+          const card = pick(s, pool.filter((x) => !me.secrets.some((sec) => sec.cardId === x.id)));
+          if (!card) break;
+          me.secrets.push({ uid: this.uid(), cardId: card.id });
+          this.log(me.id, `${me.name}施放了一個隨機法師奧秘`);
+        }
+        break;
+      }
+      case 'judgment': {
+        if (ctx.chosen === null) break;
+        const chosen = this.minion(ctx.chosen);
+        if (!chosen) break;
+        const atk = this.atkOf(chosen);
+        const hp = chosen.maxHp;
+        for (const m of [...s.players[0].board, ...s.players[1].board]) {
+          m.baseAtk = atk;
+          m.atkBuff = 0;
+          m.tempAtk = -m.auraAtk;
+          m.baseHp = Math.max(1, hp - m.auraHp);
+          m.maxHp = Math.max(1, hp);
+          m.hp = m.maxHp;
+        }
+        break;
+      }
+      case 'spireSecurity': {
+        const spells = me.deck.filter((h) => getCard(h.cardId).type === 'SPELL');
+        const revealed = pick(s, spells);
+        if (!revealed) break;
+        this.log(me.id, `${me.name}揭露了${this.name(revealed.cardId)}`);
+        if (getCard(revealed.cardId).cost >= 5) {
+          yield* this.runEffects([{ e: 'splitDamage', filter: { type: 'minion', side: 'enemy' }, amount: 5, spell: false }], ctx);
+        }
+        break;
+      }
+      case 'sawbones': {
+        const victims = me.board.filter((m) => m.uid !== ctx.sourceUid && this.alive(m));
+        for (const m of victims) m.dead = true;
+        const n = victims.length;
+        if (n) {
+          yield* this.draw(me, n);
+          me.mana = Math.min(me.maxMana, me.mana + n);
+        }
+        break;
+      }
+      case 'karov': {
+        const legendaries = this.randomPool({ type: 'MINION', rarity: 'LEGENDARY' }, ctx.controller, false);
+        for (let i = 0; i < 3; i++) {
+          const card = pick(s, legendaries);
+          if (!card) break;
+          const h = this.addToHand(me, card.id);
+          if (!h) continue;
+          h.atkBuff = 1 - (card.attack ?? 0);
+          h.hpBuff = 1 - (card.health ?? 1);
+          h.costMod = 1 - card.cost;
+        }
+        break;
+      }
+      case 'overloadController':
+        me.overloadOwed += Number(args.amount ?? 2);
+        break;
+      case 'hogdriver': {
+        const drawn = yield* this.draw(me, 2);
+        if (drawn.length === 2 && drawn.every((h) => getCard(h.cardId).type === 'MINION')) {
+          const src = ctx.sourceUid !== null ? this.minion(ctx.sourceUid) : null;
+          if (src && !src.keywords.includes('CHARGE')) src.keywords.push('CHARGE');
+        }
+        break;
+      }
+      case 'jadeGuardians': {
+        const discount = me.cardsPlayedForTwoMana ?? 0;
+        const pool = this.randomPool({ type: 'MINION', cost: 8 }, ctx.controller, false);
+        for (let i = 0; i < 2; i++) {
+          const card = pick(s, pool);
+          if (!card) break;
+          const h = this.addToHand(me, card.id);
+          if (h) h.costMod -= discount;
+        }
+        break;
+      }
+      case 'alarmOMaticEnemy': {
+        const self = ctx.sourceUid !== null ? this.minion(ctx.sourceUid) : null;
+        const candidates = foe.hand.filter((h) => getCard(h.cardId).type === 'MINION');
+        const chosen = pick(s, candidates);
+        if (!self || !chosen || me.board.length > MAX_BOARD) break;
+        const pos = me.board.indexOf(self);
+        if (pos < 0) break;
+        foe.hand.splice(foe.hand.indexOf(chosen), 1);
+        me.board.splice(pos, 1);
+        this.addToHand(foe, self.cardId);
+        const summoned = this.makeMinion(me.id, chosen.cardId, chosen);
+        summoned.sleeping = true;
+        summoned.summonedTurn = s.turn;
+        me.board.splice(Math.min(pos, me.board.length), 0, summoned);
+        this.recalcAuras();
+        yield* this.emit({ k: 'summon', player: me.id, subject: summoned.uid, races: getCard(summoned.cardId).races });
+        break;
+      }
+      case 'annihilation': {
+        for (const m of [...s.players[0].board, ...s.players[1].board]) m.dead = true;
+        yield* this.processDeaths();
+        const bottom = me.deck.slice(0, 3);
+        const demons = bottom.filter((h) => (getCard(h.cardId).races ?? []).some((r) => r === 'DEMON' || r === 'ALL'));
+        for (const h of demons) {
+          const i = me.deck.indexOf(h);
+          if (i >= 0) me.deck.splice(i, 1);
+          yield* this.summon(me.id, h.cardId);
+        }
+        break;
+      }
+      case 'shadowRounds': {
+        if (ctx.chosen === null) break;
+        let target = this.minion(ctx.chosen);
+        const amount = 2 + (ctx.isSpell ? this.spellDamage(ctx.controller) : 0);
+        for (let guard = 0; target && guard < 14; guard++) {
+          yield* this.damage(this.dmgSource(ctx), target.uid, amount);
+          const died = target.hp <= 0 || target.dead;
+          if (!died) break;
+          yield* this.processDeaths();
+          target = pick(s, foe.board.filter((m) => this.alive(m))) ?? null;
+        }
+        break;
+      }
+      case 'soulParasiteGainStats': {
+        const src = ctx.sourceUid !== null ? this.minion(ctx.sourceUid) : null;
+        const it = ctx.it?.kind === 'char' ? this.minion(ctx.it.uid) : null;
+        if (src && it) {
+          src.atkBuff += this.atkOf(it);
+          const hp = it.maxHp;
+          src.hpBuff += hp;
+          src.maxHp += hp;
+          src.hp += hp;
+        }
+        break;
+      }
+      case 'hellraiser': {
+        if (!me.deck.length) {
+          const src = ctx.sourceUid !== null ? this.minion(ctx.sourceUid) : null;
+          if (src) {
+            src.atkBuff += 4;
+            src.maxHp += 4;
+            src.hp += 4;
+          }
+          break;
+        }
+        const opts = shuffle(s, [...me.deck]).slice(0, 3);
+        const id = yield* this.choose(ctx, opts.map((h) => h.cardId), '發現牌庫中的一張牌');
+        const h = opts.find((x) => x.cardId === id);
+        if (h) {
+          me.deck.splice(me.deck.indexOf(h), 1);
+          this.enterHandCard(me, h);
+        }
+        break;
+      }
+      case 'hexmarshal': {
+        const pool = this.randomPool({ type: 'SPELL', minCost: 5 }, ctx.controller, true);
+        const card = pick(s, pool);
+        if (!card) break;
+        const h = this.addToHand(me, card.id);
+        if (h && me.deckStartedNoSpells) h.costMod -= 5;
+        break;
+      }
+      case 'staffOfTrickery': {
+        const opts = this.discoverOptions({ cls: 'DRUID' }, ctx.controller);
+        if (!opts.length) break;
+        const id = yield* this.choose(ctx, opts, '發現一張德魯伊卡牌');
+        const h = this.addToHand(me, id);
+        if (h) h.costMod -= this.atkOf(me.hero);
+        break;
+      }
+      case 'copyDeckSpells': {
+        const copies = me.deck.filter((h) => getCard(h.cardId).type === 'SPELL').map((h) => ({ ...structuredClone(h), uid: this.uid() }));
+        for (const h of copies) me.deck.splice(randomInt(s, me.deck.length + 1), 0, h);
+        break;
+      }
+      case 'shuffleRandomDHSpell': {
+        const pool = this.randomPool({ type: 'SPELL', cls: 'DEMONHUNTER' }, ctx.controller, false);
+        const card = pick(s, pool);
+        if (card) me.deck.splice(randomInt(s, me.deck.length + 1), 0, this.newHandCard(card.id));
+        break;
+      }
+      case 'moragg': {
+        const demons = me.deck.filter((h) => {
+          const races = getCard(h.cardId).races ?? [];
+          return getCard(h.cardId).type === 'MINION' && (races.includes('DEMON') || races.includes('ALL'));
+        });
+        const h = pick(s, demons);
+        if (!h) break;
+        me.deck.splice(me.deck.indexOf(h), 1);
+        const summoned = yield* this.summon(me.id, h.cardId);
+        if (summoned) summoned.abilities.push({ on: { k: 'deathrattle' }, effects: [{ e: 'summon', card: 'JAIL_906', count: 1, who: 'self' }] });
+        break;
+      }
+      case 'undeathSentence': {
+        const options = me.graveyard.filter((id) => getCard(id).type === 'MINION' && (getCard(id).abilities ?? []).some((a) => a.on.k === 'deathrattle'));
+        const id = pick(s, options);
+        if (id) {
+          const dummy = this.makeMinion(me.id, id);
+          yield* this.runDeathrattles(dummy);
+        }
+        break;
+      }
+      case 'capturedArchmage': {
+        if (me.graveyard.filter((id) => id === ctx.sourceCardId).length < 5) break;
+        const target = pick(s, this.chars().filter((x) => this.alive(x) && x.owner !== ctx.controller));
+        if (target) yield* this.damage({ owner: ctx.controller, uid: null, cardId: 'CS2_029' }, target.uid, 6 + this.spellDamage(ctx.controller));
+        break;
+      }
+      case 'chefNethrekStart':
+        if (me.deckStartedAllCostMax3) me.mana10AfterTurns = 5;
+        break;
       case 'counter':
         this.spellCountered = true;
         break;
