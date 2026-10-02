@@ -233,6 +233,7 @@ export class Game {
         graveyard: [],
         fatigue: 0,
         cardsPlayedThisTurn: 0,
+        playedCardsThisTurn: [],
         spellsCastThisGame: 0,
         heroAttackedThisTurn: false,
         elementalLastTurn: false,
@@ -1255,6 +1256,7 @@ export class Game {
       }
       yield* this.emit({ k: 'cardPlayed', player: p.id, cardType: 'WEAPON', cardId: def.id, echo });
     }
+    if (def.id !== 'JAIL_500') (p.playedCardsThisTurn ??= []).push({ cardId: def.id, option, side });
     if (this.powerDef(p).refresh === 'cardPlayed') p.heroPower.used = false;
     this.returnGodfreyOverdraw(p);
   }
@@ -3934,6 +3936,105 @@ export class Game {
       case 'picklockDamage': {
         const self = ctx.sourceUid !== null ? this.minion(ctx.sourceUid) : null;
         if (self && ctx.chosen !== null) yield* this.damage(this.dmgSource(ctx), ctx.chosen, Math.max(1, self.baseAtk));
+        break;
+      }
+      case 'azalinaStart': {
+        me.hero.maxHp = 40;
+        me.hero.hp = 40;
+        // 此專案原本固定 30 張牌組；Azalina 在開局時把自己的部分裁成 20，再混入對手隨機 20 張複製。
+        if (me.deck.length > 20) me.deck = shuffle(s, [...me.deck]).slice(0, 20);
+        const copies = shuffle(s, [...foe.deck]).slice(0, 20);
+        for (const h of copies) {
+          const c = { ...structuredClone(h), uid: this.uid(), startedInDeck: false, copiedFromOpponent: true };
+          me.deck.push(c);
+        }
+        break;
+      }
+      case 'drawUntilHandFull':
+        if (me.hand.length < MAX_HAND) yield* this.draw(me, MAX_HAND - me.hand.length);
+        break;
+      case 'tinyPalChooseAmmo': {
+        const options = ['JAIL_458t1', 'JAIL_458t2', 'JAIL_458t3', 'JAIL_458t4'].filter((id) => id !== me.weapon?.cardId);
+        if (!options.length || !me.weapon) break;
+        const chosen = yield* this.choose(ctx, options, '選擇元素彈藥');
+        const def = getCard(chosen);
+        me.weapon.cardId = chosen;
+        me.weapon.abilities = [...(def.abilities ?? [])];
+        me.weapon.keywords = [...(def.keywords ?? [])];
+        break;
+      }
+      case 'tinyPalAmmo': {
+        const kind = String(args.kind ?? '');
+        if (kind === 'frost') {
+          const skip = this.lastAttack?.defender;
+          const enemies = shuffle(s, this.chars().filter((c) => this.alive(c) && c.owner !== ctx.controller && c.uid !== skip));
+          for (const c of enemies.slice(0, 2)) this.freeze(c);
+        } else if (kind === 'fire') {
+          for (const c of this.chars().filter((x) => this.alive(x) && x.owner !== ctx.controller)) {
+            yield* this.damage(this.dmgSource(ctx), c.uid, 1);
+            if (this.over) return;
+          }
+        } else if (kind === 'earth') {
+          const card = pick(s, this.randomPool({ type: 'MINION', cost: 3 }, ctx.controller, false));
+          if (card) {
+            const m = yield* this.summon(ctx.controller, card.id);
+            if (m && !m.keywords.includes('TAUNT')) m.keywords.push('TAUNT');
+          }
+        } else if (kind === 'air') {
+          const card = pick(s, poolCards({ type: 'MINION', hasBattlecry: true }, me.heroClass, foe.heroClass));
+          if (card) {
+            const h = this.addToHand(me, card.id);
+            if (h) h.costMod -= 2;
+          }
+        }
+        yield* this.custom('tinyPalChooseAmmo', {}, ctx);
+        break;
+      }
+      case 'lotusTroublemaker': {
+        const shots = 1 + (me.cardsPlayedForTwoMana ?? 0);
+        for (let i = 0; i < shots; i++) {
+          const enemies = this.chars().filter((c) => this.alive(c) && c.owner !== ctx.controller);
+          const victim = pick(s, enemies);
+          if (!victim) break;
+          yield* this.damage(this.dmgSource(ctx), victim.uid, 1);
+          if (this.over) return;
+        }
+        break;
+      }
+      case 'sliceAndDice': {
+        const history = shuffle(s, [...(me.playedCardsThisTurn ?? [])]);
+        for (const item of history) {
+          const def = getCard(item.cardId);
+          const abilities = def.chooseOne ? (def.chooseOne[item.option ?? 0]?.abilities ?? []) : (def.abilities ?? []);
+          const playAbilities = abilities.filter((a) => a.on.k === 'play');
+          const rctx: Ctx = { ...this.baseCtx(ctx.controller), sourceCardId: def.id, isSpell: def.type === 'SPELL' };
+          const req = def.chooseOne ? def.chooseOne[item.option ?? 0]?.target : def.target;
+          if (req) {
+            const legal = this.validTargets(req, ctx.controller, def.type === 'SPELL');
+            const enemies = legal.filter((uid) => this.char(uid)?.owner !== ctx.controller);
+            rctx.chosen = pick(s, enemies.length ? enemies : legal) ?? null;
+          }
+          if (def.type === 'MINION') {
+            if (me.board.length >= MAX_BOARD) continue;
+            const m = yield* this.doSummon(rctx, ctx.controller, def.id);
+            if (!m) continue;
+            rctx.sourceUid = m.uid;
+          } else if (def.type === 'WEAPON') {
+            yield* this.equip(ctx.controller, def.id);
+            rctx.sourceUid = me.weapon?.uid ?? null;
+          } else if (def.type === 'HERO') {
+            me.hero.cardId = def.id;
+            me.hero.armor += def.armor ?? 0;
+            if (def.heroPower) me.heroPower = { id: def.heroPower.id, used: false, cost: def.heroPower.cost, heroCard: def.id };
+            rctx.sourceUid = me.hero.uid;
+          }
+          for (const ab of playAbilities) {
+            if (ab.cond && !this.evalCond(ab.cond, rctx)) continue;
+            yield* this.runEffects(ab.effects, rctx);
+            if (this.over) return;
+          }
+        }
+        if (!this.over && this.s.current === ctx.controller) yield* this.endTurn();
         break;
       }
       case 'godfreyStart':
