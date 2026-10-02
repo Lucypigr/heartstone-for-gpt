@@ -203,6 +203,35 @@ describe('2026：碎裂（Shatter）', () => {
     expect(p.hand[0].cardId).toBe('CATA_479');
     expect(p.hand[0].shatterCombined).toBe(true);
   });
+
+
+  it('Wildwood Circle 完整牌會召喚兩個樹人，並賦予所有友方手下召喚樹人的亡語', () => {
+    const g = newGame();
+    const original = put(g, 'CS2_231', 0);
+    play(g, 'CATA_134');
+
+    expect(g.s.players[0].board).toHaveLength(3);
+    expect(g.s.players[0].board.filter((m) => m.cardId === 'CATA_134t3')).toHaveLength(2);
+    expect(original.abilities.some((a) => a.on.k === 'deathrattle')).toBe(true);
+
+    play(g, 'CS2_029', original.uid);
+    expect(g.s.players[0].board.filter((m) => m.cardId === 'CATA_134t3')).toHaveLength(3);
+  });
+
+  it('Schism 完整牌先給 +2/+3 與 Elusive，再召喚該強化手下的複製', () => {
+    const g = newGame();
+    const target = put(g, 'CS2_182', 0);
+    play(g, 'CATA_306', target.uid);
+
+    expect(g.s.players[0].board).toHaveLength(2);
+    const [first, copy] = g.s.players[0].board;
+    expect(g.atkOf(first)).toBe(6);
+    expect(first.maxHp).toBe(8);
+    expect(g.hasKw(first, 'ELUSIVE')).toBe(true);
+    expect(g.atkOf(copy)).toBe(6);
+    expect(copy.maxHp).toBe(8);
+    expect(g.hasKw(copy, 'ELUSIVE')).toBe(true);
+  });
 });
 
 describe('戰鬥', () => {
