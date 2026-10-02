@@ -19,6 +19,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Rebuild official card data
+        shell: bash
         run: |
           set -o pipefail
           npm run cards 2>&1 | tee card-build.log
@@ -29,20 +30,7 @@ jobs:
           console.log('VIOLET_HOLD_SUPPORTED=' + cards.length);
           console.log('VIOLET_HOLD_IDS=' + cards.map((c) => c.id).join(','));
           NODE
-          grep 
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: violet-hold-card-diagnostics
-          path: |
-            card-build.log
-            violet-hold-unsupported.txt
-            .cache/unsupported.txt
-            src/data/cards.json
-            violet-hold-entities.json
-      - run: npm test
-      - run: npm run build
-\t1988\t' .cache/unsupported.txt > violet-hold-unsupported.txt || true
+          awk -F '\t' '$2 == 1988' .cache/unsupported.txt > violet-hold-unsupported.txt || true
           echo "VIOLET_HOLD_UNSUPPORTED=$(wc -l < violet-hold-unsupported.txt)"
           npx tsx scripts/dump-violet.ts
       - uses: actions/upload-artifact@v4
@@ -54,5 +42,6 @@ jobs:
             violet-hold-unsupported.txt
             .cache/unsupported.txt
             src/data/cards.json
+            violet-hold-entities.json
       - run: npm test
       - run: npm run build
