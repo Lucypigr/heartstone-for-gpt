@@ -4056,7 +4056,7 @@ export class Game {
       case 'resolveShamTrial': {
         const effects = ctx.sourceHandCard?.trialEffects ?? [];
         const delay = ctx.sourceHandCard?.trialDelay ?? 0;
-        if (delay > 0) (me.delayed ??= []).push({ turns: delay, effects: [fn('executeShamTrial', { effects })], sourceCardId: 'VH_SHAM_TRIAL' });
+        if (delay > 0) (me.delayed ??= []).push({ turns: delay, effects: [{ e: 'custom', fn: 'executeShamTrial', args: { effects } }], sourceCardId: 'VH_SHAM_TRIAL' });
         else yield* this.custom('executeShamTrial', { effects }, ctx);
         break;
       }
