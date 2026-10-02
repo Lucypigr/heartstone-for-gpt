@@ -76,6 +76,29 @@ describe('卡牌敘述解析', () => {
     expect(r.abilities[0].effects[0]).toMatchObject({ e: 'buff', target: { t: 'self' }, atk: 2 });
   });
 
+  it('紫羅蘭堡通用卡池、條件與群體目標', () => {
+    expect(parsePool('a spell that costs (5) or more')).toEqual({ type: 'SPELL', minCost: 5 });
+
+    const summon = parse('Summon a 2-Cost Taunt minion.', 'SPELL');
+    expect(summon.abilities[0].effects[0]).toMatchObject({
+      e: 'summonRandom',
+      count: 1,
+      pool: { type: 'MINION', cost: 2, keyword: 'TAUNT' },
+    });
+
+    const deckSize = parse('If your deck has 25 or more cards, draw a card.');
+    expect(deckSize.abilities[0].effects[0]).toMatchObject({ e: 'cond', cond: { c: 'deckSize', op: '>=', n: 25 } });
+
+    const noNeutral = parse('Battlecry: If your deck has no Neutral cards, draw a card.');
+    expect(noNeutral.abilities[0].effects[0]).toMatchObject({ e: 'cond', cond: { c: 'deckNoNeutral' } });
+
+    const group = parse('Battlecry: Give your damaged minions +1/+2.');
+    expect(group.abilities[0].effects[0]).toMatchObject({ e: 'buff', target: { t: 'all', filter: { side: 'friendly', damaged: true } } });
+
+    const aura = parse('All friendly minions are Poisonous.');
+    expect(aura.auras).toEqual([{ scope: 'friendlyMinions', keywords: ['POISONOUS'] }]);
+  });
+
   it('看不懂的敘述會回報不支援', () => {
     expect(() => parse('Swap your hand with your opponent\'s hand.')).toThrow(Unsupported);
     expect(() => parse('<b>Battlecry:</b> Do something weird.')).toThrow(Unsupported);
