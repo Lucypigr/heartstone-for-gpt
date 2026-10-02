@@ -551,7 +551,7 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
               {placing && <Slot onClick={() => onPlace(i + 1)} />}
             </span>
           ))}
-          {placing && selectedDef && <div className="ghost-minion">{selectedDef.name}</div>}
+
         </div>
       </div>
 
