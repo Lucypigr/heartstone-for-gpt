@@ -29,7 +29,13 @@ for (const [id, patch] of Object.entries(OVERRIDES)) {
   if (!CARDS[id]) continue;
   const { heroPower, tokens: _tokens, ...rest } = patch;
   const base = CARDS[id];
-  CARDS[id] = { ...base, ...rest, heroPower: heroPower && base.heroPower ? { ...base.heroPower, ...heroPower } : base.heroPower };
+  const mergedHeroPower =
+    heroPower && base.heroPower
+      ? { ...base.heroPower, ...heroPower }
+      : heroPower && 'id' in heroPower
+        ? heroPower
+        : base.heroPower;
+  CARDS[id] = { ...base, ...rest, heroPower: mergedHeroPower };
 }
 for (const c of CUSTOM_CARDS) CARDS[c.id] = { ...c, custom: true };
 
