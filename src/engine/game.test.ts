@@ -114,6 +114,51 @@ describe('法術', () => {
   });
 });
 
+describe('2026：預備（Prepare）', () => {
+  it('投入剩餘法力並額外減 1，且預備當回合不能打出、不能再次預備', () => {
+    const g = newGame();
+    const uid = give(g, 'JAIL_913'); // Hold Them Off!：5 費 Prepare
+    const p = g.s.players[0];
+    p.mana = 3;
+
+    expect(g.canPrepare(uid).ok).toBe(true);
+    expect(g.apply({ type: 'prepare', handUid: uid })).toBe(true);
+    const hc = p.hand.find((h) => h.uid === uid)!;
+
+    expect(p.mana).toBe(0);
+    expect(hc.prepared).toBe(true);
+    expect(hc.prepareDiscount).toBe(4);
+    expect(g.costOf(p, hc)).toBe(1);
+    expect(p.cardsPlayedThisTurn).toBe(0);
+    expect(g.canPrepare(uid).ok).toBe(false);
+    expect(g.canPlay(uid).ok).toBe(false);
+
+    // 到自己的下一回合後就能正常打出。
+    g.apply({ type: 'endTurn' });
+    g.apply({ type: 'endTurn' });
+    const target = put(g, 'CS2_182', 0);
+    expect(g.canPlay(uid).ok).toBe(true);
+    expect(g.apply({ type: 'play', handUid: uid, target: target.uid })).toBe(true);
+    expect(g.atkOf(target)).toBe(9);
+    expect(target.maxHp).toBe(10);
+  });
+
+  it('法力很多時只花到足以把目前費用降成 0', () => {
+    const g = newGame();
+    const uid = give(g, 'JAIL_913');
+    const p = g.s.players[0];
+    p.mana = 10;
+    const beforePlayed = p.cardsPlayedThisTurn;
+
+    expect(g.apply({ type: 'prepare', handUid: uid })).toBe(true);
+    const hc = p.hand.find((h) => h.uid === uid)!;
+    expect(p.mana).toBe(6); // 5 費牌只需投入 4，再加額外 -1 即為 0 費
+    expect(hc.prepareDiscount).toBe(5);
+    expect(g.costOf(p, hc)).toBe(0);
+    expect(p.cardsPlayedThisTurn).toBe(beforePlayed);
+  });
+});
+
 describe('戰鬥', () => {
   it('手下互相攻擊並造成傷害，嘲諷必須優先攻擊', () => {
     const g = newGame();
