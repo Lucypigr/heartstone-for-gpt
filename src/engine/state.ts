@@ -36,6 +36,16 @@ export interface HandCard {
   preparedTurn?: number;
   /** 碎裂兩半重組後的原卡；避免再次進手牌時重新碎裂 */
   shatterCombined?: boolean;
+  /** 紫羅蘭堡 Follow：打出後追加並傳遞的暫時效果 */
+  follow?: { kind: 'footsteps' | 'fuse' | 'evidence' | 'ghosts'; expiresTurn: number };
+  /** 此手牌實體被額外賦予 Prepare */
+  prepareGranted?: boolean;
+  /** 此手牌實體被賦予「施放兩次」 */
+  castTwice?: boolean;
+  /** 這張牌是從對手牌張複製而來 */
+  copiedFromOpponent?: boolean;
+  /** 進入目前擁有者手牌的遊戲回合 */
+  enteredHandTurn?: number;
 }
 
 export interface Minion {
@@ -76,6 +86,8 @@ export interface Minion {
   starship?: StarshipPiece[];
   /** 這個手下消滅的手下（厄索克） */
   killed?: string[];
+  /** 休眠：在擁有者每個回合開始遞減，0 時甦醒 */
+  dormantTurns?: number;
 }
 
 export interface Hero {
@@ -108,6 +120,38 @@ export interface Weapon {
 export interface SecretInst {
   uid: number;
   cardId: string;
+}
+
+export interface VioletPlayerState {
+  /** 開局時原始牌庫快照（Rulebreaker 與「未起始牌庫」判定） */
+  startingDeck: string[];
+  /** Godfrey：溢抽後等待手牌空位的牌 */
+  overdrawQueue?: HandCard[];
+  returnOverdraw?: boolean;
+  /** Irida：送入虛空的牌 */
+  voidDeck?: HandCard[];
+  /** Cannoneer 額外射擊數 */
+  cannoneerExtraShots?: number;
+  /** Imp-formant 被召喚時的永久 +X/+X */
+  impformantBuff?: number;
+  /** Void Soul 下一次召喚的惡魔費用 */
+  voidSoulLevel?: number;
+  /** 本場打出實際支付 2 Mana 的牌數 */
+  paidTwoCards?: number;
+  /** Warptooth：本回合友方角色受到傷害的不同次數 */
+  friendlyDamageThisTurn?: number;
+  /** 本場因 Reborn 再生過的友方手下 */
+  rebornHistory?: string[];
+  /** 額外的紫羅蘭堡英雄能力 */
+  secondaryHeroPower?: { id: string; name: string; text: string; cost: number; used: boolean; costKind: 'mana' | 'corpses' };
+  /** Mug'Zee 的兩種被動 */
+  mugPower?: boolean;
+  zeePower?: boolean;
+  zeeCount?: number;
+  /** Chef Neth'rek：到此自己的回合開始時設為 10 Mana */
+  nethrekTurnsLeft?: number;
+  /** Gullible Guard */
+  sorryUnlocked?: boolean;
 }
 
 export interface PlayerState {
@@ -179,6 +223,8 @@ export interface PlayerState {
   drawnThisTurn: number;
   /** 本場對戰召喚過的各種族手下數量 */
   summonedRaces: Record<string, number>;
+  /** 紫羅蘭堡系列的跨回合 / 開局規則狀態 */
+  violet: VioletPlayerState;
   /** 是否為電腦 */
   ai: boolean;
 }
@@ -246,7 +292,7 @@ export interface GameState {
 export type Action =
   | { type: 'play'; handUid: number; target?: number; position?: number; option?: number; side?: 'friendly' | 'enemy' }
   | { type: 'attack'; attacker: number; target: number }
-  | { type: 'heroPower'; target?: number; option?: number }
+  | { type: 'heroPower'; target?: number; option?: number; secondary?: boolean }
   | { type: 'trade'; handUid: number }
   /** 預備：花掉剩餘法力，讓這張牌永久減費並鎖到下回合 */
   | { type: 'prepare'; handUid: number }
