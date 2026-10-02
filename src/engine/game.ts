@@ -1137,6 +1137,7 @@ export class Game {
     const t = this.char(targetUid);
     if (!t || amount <= 0 || this.over) return 0;
     let overkill = false;
+    let honorableKill = false;
     if (isHero(t)) {
       if (t.immune) return 0;
       if (amount >= t.hp + t.armor && this.s.current !== t.owner) {
@@ -1147,6 +1148,8 @@ export class Game {
           return 0;
         }
       }
+      // 榮譽擊殺：自己的回合造成恰好致死的傷害（護甲也算有效生命）
+      if (amount === t.hp + t.armor && this.s.current === src.owner) honorableKill = true;
       const absorbed = Math.min(t.armor, amount);
       t.armor -= absorbed;
       t.hp -= amount - absorbed;
@@ -1161,8 +1164,11 @@ export class Game {
         this.fx({ kind: 'shield', uid: t.uid });
         return 0;
       }
-      // 滅殺：在自己的回合造成超過消滅手下所需的傷害
-      if (amount > t.hp && this.s.current === src.owner) overkill = true;
+      // 滅殺 / 榮譽擊殺都只在傷害來源擁有者的回合判定
+      if (this.s.current === src.owner) {
+        if (amount > t.hp) overkill = true;
+        if (amount === t.hp) honorableKill = true;
+      }
       t.hp -= amount;
       if (src.poisonous) t.dead = true;
     }
@@ -1182,6 +1188,7 @@ export class Game {
       }
     }
     if (overkill) yield* this.overkill(src);
+    if (honorableKill) yield* this.honorableKill(src);
     return amount;
   }
 
@@ -1206,6 +1213,34 @@ export class Game {
     }
     const list = abilities.filter((a) => a.on.k === 'overkill');
     if (list.length) this.log(src.owner, `${this.name(ctx.sourceCardId)}觸發了滅殺`);
+    for (const ab of list) {
+      if (ab.cond && !this.evalCond(ab.cond, ctx)) continue;
+      yield* this.runEffects(ab.effects, ctx);
+      if (this.over) return;
+    }
+  }
+
+  /** 觸發榮譽擊殺：自己的回合造成恰好致死的傷害 */
+  private *honorableKill(src: DmgSource): Gen {
+    const p = this.s.players[src.owner];
+    const ctx = this.baseCtx(src.owner);
+    let abilities: Ability[] = [];
+    const m = src.uid !== null ? this.minion(src.uid) : null;
+    if (m) {
+      if (!m.silenced) abilities = m.abilities;
+      ctx.sourceUid = m.uid;
+      ctx.sourceCardId = m.cardId;
+    } else if (src.uid === p.hero.uid && p.weapon) {
+      abilities = p.weapon.abilities;
+      ctx.sourceUid = p.weapon.uid;
+      ctx.sourceCardId = p.weapon.cardId;
+    } else if (src.cardId && getCard(src.cardId).type === 'SPELL') {
+      abilities = getCard(src.cardId).abilities ?? [];
+      ctx.sourceCardId = src.cardId;
+      ctx.isSpell = true;
+    }
+    const list = abilities.filter((a) => a.on.k === 'honorableKill');
+    if (list.length) this.log(src.owner, `${this.name(ctx.sourceCardId)}觸發了榮譽擊殺`);
     for (const ab of list) {
       if (ab.cond && !this.evalCond(ab.cond, ctx)) continue;
       yield* this.runEffects(ab.effects, ctx);
