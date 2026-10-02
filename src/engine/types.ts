@@ -440,6 +440,8 @@ export interface CardDef {
   launchTransform?: string;
   /** 預備：可把剩餘法力投資成永久減費，且預備當回合不能打出 */
   prepare?: boolean;
+  /** 偽裝／自由放置：這張手下可打到自己或對手的場上 */
+  disguised?: boolean;
   /** 碎裂：進入手牌時分裂成左右兩個官方半片 */
   shatter?: { left: string; right: string };
   /** 碎裂半片：記錄可與哪一張另一半重組回原卡 */
