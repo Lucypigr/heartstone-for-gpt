@@ -225,8 +225,9 @@ describe('2026：紫羅蘭堡批次復原（一）', () => {
     p.deck = [g.newHandCard('CS2_182'), g.newHandCard('CS2_231'), g.newHandCard('CS2_101t'), g.newHandCard('CS2_101t')];
     const uid = give(g, 'JAIL_516');
     expect(g.apply({ type: 'play', handUid: uid, position: 0 })).toBe(true);
-    const recruits = p.board.filter((m) => m.cardId === 'CS2_101t');
+    const recruits = p.board.filter((m) => m.cardId !== 'JAIL_516');
     expect(recruits).toHaveLength(2);
+    expect(recruits.every((m) => getCard(m.cardId).cost <= 2)).toBe(true);
     expect(recruits.every((m) => m.keywords.includes('RUSH'))).toBe(true);
   });
 });
