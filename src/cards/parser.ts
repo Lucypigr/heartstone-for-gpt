@@ -1255,6 +1255,7 @@ interface TriggerRule {
 }
 
 const TRIGGERS: TriggerRule[] = [
+  { re: /^Start of Game: /, build: () => ({ on: { k: 'startGame' } }) },
   { re: /^Battlecry and Deathrattle: /, build: () => ({ on: { k: 'play' }, also: { k: 'deathrattle' } }) },
   { re: /^Battlecry: /, build: () => ({ on: { k: 'play' }, play: true }) },
   { re: /^Combo: /, build: () => ({ on: { k: 'play' }, cond: { c: 'combo' }, play: true }) },
