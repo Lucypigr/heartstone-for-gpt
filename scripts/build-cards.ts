@@ -514,12 +514,6 @@ async function main() {
   console.log('各系列支援數：', [...bySet.entries()].sort((a, b) => a[0] - b[0]).map(([s, v]) => `${s}:${v.ok}/${v.total}`).join(' '));
   console.log('主要不支援原因：');
   for (const [k, n] of [...reasons.entries()].sort((a, b) => b[1] - a[1]).slice(0, 25)) console.log(`  ${n}\t${k}`);
-  // 2026 資料片開發診斷：直接列出目前仍被擋住的卡與第一個原因。
-  for (const setId of [1980, 1988]) {
-    const rows = failures.filter((f) => f.set === setId);
-    console.log(`2026系列 ${setId} 未支援：${rows.length}`);
-    for (const f of rows) console.log(`  ${f.id}\t${f.name}\t${f.reason}`);
-  }
 }
 
 main().catch((e) => {
