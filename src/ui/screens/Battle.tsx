@@ -3,7 +3,7 @@ import { getCard, hasCard, HEROES } from '../../cards/registry';
 import { AiBrain, aiMulligan, chooseAction, EMOTE_NAMES, EMOTE_TEXT, type Emote } from '../../engine/ai';
 import { Game } from '../../engine/game';
 import { CLASS_NAMES } from '../../engine/heroes';
-import type { Action, Hero, Minion, PlayerId, PlayerState } from '../../engine/state';
+import { MAX_BOARD, type Action, type Hero, type Minion, type PlayerId, type PlayerState } from '../../engine/state';
 import type { CardDef } from '../../engine/types';
 import { DIFFICULTY_NAMES } from '../../game/economy';
 import { RUNE_NAMES } from '../../game/decks';
@@ -20,7 +20,7 @@ import { getProfile, setProfile, useProfile } from '../store';
 
 type Mode =
   | { k: 'idle' }
-  | { k: 'card'; handUid: number; stage: 'select' | 'choose' | 'place' | 'target'; option?: number; position?: number }
+  | { k: 'card'; handUid: number; stage: 'select' | 'choose' | 'place' | 'target'; option?: number; position?: number; side?: 'friendly' | 'enemy' }
   | { k: 'attack'; attacker: number }
   | { k: 'heroPower'; option?: number }
   | { k: 'powerChoose' };
@@ -272,7 +272,8 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
     if (mode.k === 'heroPower') return new Set(g.heroPowerTargets(mode.option));
     if (mode.k === 'card' && mode.stage === 'target') {
       const req = g.playTargetReq(mode.handUid, mode.option);
-      if (req) return new Set(g.validTargets(req, ME, g.cardIsSpell(mode.handUid)));
+      const controller = mode.side === 'enemy' ? AI : ME;
+      if (req) return new Set(g.validTargets(req, controller, g.cardIsSpell(mode.handUid)));
     }
     return new Set<number>();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -293,10 +294,11 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
   const foe = s.players[AI];
 
   // ------------------------------------------------------------ 點擊處理
-  const needsTarget = (handUid: number, option?: number) => {
+  const needsTarget = (handUid: number, option?: number, side: 'friendly' | 'enemy' = 'friendly') => {
     const req = g.playTargetReq(handUid, option);
     if (!req) return false;
-    return g.validTargets(req, ME, g.cardIsSpell(handUid)).length > 0;
+    const controller = side === 'enemy' ? AI : ME;
+    return g.validTargets(req, controller, g.cardIsSpell(handUid)).length > 0;
   };
 
   const afterOption = (handUid: number, option: number | undefined) => {
@@ -332,16 +334,16 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
     else setMode({ k: 'card', handUid, stage: 'select' });
   };
 
-  const onPlace = (position: number) => {
+  const onPlace = (position: number, side: 'friendly' | 'enemy' = 'friendly') => {
     if (mode.k !== 'card') return;
-    if (needsTarget(mode.handUid, mode.option)) setMode({ ...mode, position, stage: 'target' });
-    else act({ type: 'play', handUid: mode.handUid, option: mode.option, position });
+    if (needsTarget(mode.handUid, mode.option, side)) setMode({ ...mode, position, side, stage: 'target' });
+    else act({ type: 'play', handUid: mode.handUid, option: mode.option, position, side });
   };
 
   const onTarget = (uid: number) => {
     if (mode.k === 'attack') act({ type: 'attack', attacker: mode.attacker, target: uid });
     else if (mode.k === 'heroPower') act({ type: 'heroPower', target: uid, option: mode.option });
-    else if (mode.k === 'card') act({ type: 'play', handUid: mode.handUid, target: uid, option: mode.option, position: mode.position });
+    else if (mode.k === 'card') act({ type: 'play', handUid: mode.handUid, target: uid, option: mode.option, position: mode.position, side: mode.side });
   };
 
   const onCharClick = (c: Minion | Hero) => {
@@ -401,16 +403,18 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
   const selectedCard = selectedHand !== null ? (me.hand.find((h) => h.uid === selectedHand) ?? null) : null;
   const canTrade = selectedHand !== null && g.check({ type: 'trade', handUid: selectedHand }).ok;
   const canPrepare = selectedHand !== null && g.check({ type: 'prepare', handUid: selectedHand }).ok;
-  const prepareSpend = selectedCard && canPrepare ? Math.min(me.mana, Math.max(1, g.costOf(me, selectedCard) - 1)) : 0;
+  const prepareSpend = selectedCard && canPrepare ? me.mana : 0;
   const selectedDef = selectedCard ? g.handDef(selectedCard) : null;
   const selectedStats = selectedCard && selectedDef?.type === 'MINION' ? g.handStats(ME, selectedCard) : null;
   const placing = mode.k === 'card' && mode.stage === 'place';
+  const placingFriendly = placing && me.board.length < MAX_BOARD;
+  const placingEnemy = placing && !!selectedDef?.disguised && foe.board.length < MAX_BOARD;
 
   const hint = (() => {
     if (s.phase === 'mulligan') return '';
     if (!myTurn) return s.pendingChoice ? '' : `${foe.name}的回合…`;
     if (mode.k === 'card') {
-      if (mode.stage === 'place') return '點選位置放置手下；點其他地方取消';
+      if (mode.stage === 'place') return selectedDef?.disguised ? '偽裝：點我方或對手場上的位置放置；點其他地方取消' : '點選位置放置手下；點其他地方取消';
       if (mode.stage === 'target') return '選擇目標；點其他地方取消';
       if (mode.stage === 'select') return '再點一次卡牌使用；點其他地方取消';
     }
@@ -536,7 +540,23 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
       </div>
 
       <div className="boards">
-        <div className="board foe-board">{foe.board.map(renderMinion)}</div>
+        <div
+          className={`board foe-board ${placingEnemy ? 'placing' : ''}`}
+          onClick={(e) => {
+            if (placingEnemy) {
+              e.stopPropagation();
+              onPlace(foe.board.length, 'enemy');
+            }
+          }}
+        >
+          {placingEnemy && <Slot onClick={() => onPlace(0, 'enemy')} />}
+          {foe.board.map((m, i) => (
+            <span className="board-cell" key={m.uid}>
+              {renderMinion(m)}
+              {placingEnemy && <Slot onClick={() => onPlace(i + 1, 'enemy')} />}
+            </span>
+          ))}
+        </div>
         <div className="board-divider">
           <span className="hint">{hint}</span>
           <button className={`end-turn ${myTurn ? 'ready' : ''}`} disabled={!myTurn} onClick={(e) => { e.stopPropagation(); act({ type: 'endTurn' }); }}>
@@ -544,19 +564,19 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
           </button>
         </div>
         <div
-          className={`board my-board ${placing ? 'placing' : ''}`}
+          className={`board my-board ${placingFriendly ? 'placing' : ''}`}
           onClick={(e) => {
-            if (placing) {
+            if (placingFriendly) {
               e.stopPropagation();
-              onPlace(me.board.length);
+              onPlace(me.board.length, 'friendly');
             }
           }}
         >
-          {placing && <Slot onClick={() => onPlace(0)} />}
+          {placingFriendly && <Slot onClick={() => onPlace(0, 'friendly')} />}
           {me.board.map((m, i) => (
             <span className="board-cell" key={m.uid}>
               {renderMinion(m)}
-              {placing && <Slot onClick={() => onPlace(i + 1)} />}
+              {placingFriendly && <Slot onClick={() => onPlace(i + 1, 'friendly')} />}
             </span>
           ))}
 
