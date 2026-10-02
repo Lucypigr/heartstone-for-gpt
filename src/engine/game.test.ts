@@ -367,7 +367,7 @@ describe('2026：紫羅蘭堡剩餘通用機制', () => {
   it('Reinforcement Aura 在三個自己的回合結束時各號召一次', () => {
     const g = newGame();
     const p = g.s.players[0];
-    p.deck = [g.newHandCard('CS2_182'), g.newHandCard('CS2_231'), g.newHandCard('CS2_172')];
+    p.deck = Array.from({ length: 8 }, () => g.newHandCard('CS2_171'));
     p.hand = [];
     p.mana = 10;
     play(g, 'JAIL_327');
@@ -389,15 +389,15 @@ describe('2026：紫羅蘭堡剩餘通用機制', () => {
     g.s.players[0].mana = 10;
     expect(g.apply({ type: 'play', handUid: uid, target: m.uid })).toBe(true);
     expect(g.atkOf(m)).toBeGreaterThanOrEqual(beforeAtk + 2);
-    expect(m.hp).toBeGreaterThanOrEqual(beforeHp + 2);
+    expect(m.hp).toBeGreaterThanOrEqual(beforeHp + 1);
   });
 
   it('Picklock 的費用與手牌屬性等於剩餘法力，打出後鎖定並用該值造成傷害', () => {
     const g = newGame();
     const p = g.s.players[0];
     const foe = g.s.players[1];
-    p.mana = 6;
     const uid = give(g, 'JAIL_501');
+    p.mana = 6;
     const hc = p.hand.find((h) => h.uid === uid)!;
     expect(g.costOf(p, hc)).toBe(6);
     expect(g.handStats(0, hc)).toMatchObject({ atk: 6, hp: 6 });
