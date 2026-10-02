@@ -432,7 +432,7 @@ export class Game {
       const p = this.s.players[c.owner];
       const weapon = p.weapon && this.s.current === c.owner ? p.weapon.atk : 0;
       const aura = p.board.reduce(
-        (sum, m) => sum + (m.silenced ? 0 : m.auras.filter((a) => a.scope === 'friendlyHero').reduce((x, a) => x + (a.atk ?? 0), 0)),
+        (sum, m) => sum + (m.silenced || (m.dormantTurns ?? 0) > 0 ? 0 : m.auras.filter((a) => a.scope === 'friendlyHero').reduce((x, a) => x + (a.atk ?? 0), 0)),
         0,
       );
       return Math.max(0, c.tempAtk + weapon + (this.s.current === c.owner ? aura : 0));
@@ -446,7 +446,7 @@ export class Game {
   }
 
   spellDamage(p: PlayerId): number {
-    return this.s.players[p].board.reduce((sum, m) => sum + (m.silenced ? 0 : m.spellDamage), 0);
+    return this.s.players[p].board.reduce((sum, m) => sum + (m.silenced || (m.dormantTurns ?? 0) > 0 ? 0 : m.spellDamage), 0);
   }
 
   /** 手牌的卡牌定義（殭屍獸、賄賂強化的二選一會在這裡動態合成） */
@@ -787,6 +787,7 @@ export class Game {
     if (s.phase !== 'play' || s.pendingChoice) return false;
     const c = this.char(uid);
     if (!c || c.owner !== s.current || !this.alive(c)) return false;
+    if (!isHero(c) && (c.dormantTurns ?? 0) > 0) return false;
     if (c.frozen) return false;
     if (this.atkOf(c) <= 0) return false;
     if (c.attacks >= this.maxAttacks(c)) return false;
@@ -801,7 +802,7 @@ export class Game {
     const c = this.char(uid);
     if (!c) return [];
     const enemy = this.s.players[opp(c.owner)];
-    const minions = enemy.board.filter((m) => this.alive(m) && !this.hasKw(m, 'STEALTH'));
+    const minions = enemy.board.filter((m) => this.alive(m) && (m.dormantTurns ?? 0) <= 0 && !this.hasKw(m, 'STEALTH'));
     const taunts = minions.filter((m) => this.hasKw(m, 'TAUNT'));
     let targets: Char[] = taunts.length ? taunts : minions;
     let heroAllowed = !taunts.length;
@@ -965,7 +966,14 @@ export class Game {
     p.hero.attacks = 0;
     for (const pl of s.players) pl.hero.immune = false;
     for (const m of p.board) {
-      m.sleeping = false;
+      if ((m.dormantTurns ?? 0) > 0) {
+        m.dormantTurns!--;
+        if ((m.dormantTurns ?? 0) <= 0) {
+          m.dormantTurns = undefined;
+          m.sleeping = false;
+          this.log(p.id, `${this.name(m.cardId)}從休眠中甦醒`);
+        }
+      } else m.sleeping = false;
       m.attacks = 0;
       m.nextTurnKeywords = [];
     }
@@ -1953,7 +1961,7 @@ export class Game {
       let hp = 0;
       const kws: Keyword[] = [];
       for (const src of all) {
-        if (src.silenced || !src.auras.length) continue;
+        if (src.silenced || (src.dormantTurns ?? 0) > 0 || !src.auras.length) continue;
         for (const aura of src.auras) {
           let applies = false;
           const races = getCard(m.cardId).races ?? [];
@@ -1983,6 +1991,11 @@ export class Game {
           hp += aura.hp ?? 0;
           if (aura.keywords) kws.push(...aura.keywords);
         }
+      }
+      if ((m.dormantTurns ?? 0) > 0) {
+        atk = 0;
+        hp = 0;
+        kws.length = 0;
       }
       m.auraAtk = atk;
       if (hp !== m.auraHp) {
@@ -2092,7 +2105,7 @@ export class Game {
         let ent: Minion | Weapon | null;
         if (h.kind === 'minion') {
           const m = this.minion(h.uid);
-          if (!m || m.hp <= 0 || m.dead) continue;
+          if (!m || m.hp <= 0 || m.dead || (m.dormantTurns ?? 0) > 0) continue;
           ent = m;
           abilities = m.abilities;
         } else {
@@ -2342,6 +2355,7 @@ export class Game {
     const type = f.type ?? 'character';
     if (type === 'minion' && hero) return false;
     if (type === 'hero' && !hero) return false;
+    if (!hero && ((c as Minion).dormantTurns ?? 0) > 0) return false;
     if (f.side === 'friendly' && c.owner !== ctx.controller) return false;
     if (f.side === 'enemy' && c.owner === ctx.controller) return false;
     if (f.excludeSelf && c.uid === ctx.sourceUid) return false;
@@ -3630,6 +3644,51 @@ export class Game {
       case 'chefNethrekStart':
         if (me.deckStartedAllCostMax3) me.mana10AfterTurns = 5;
         break;
+      case 'voidSoul': {
+        const tier = Math.max(1, Math.min(10, me.voidSoulLevel ?? 1));
+        const pool = this.randomPool({ type: 'MINION', race: 'DEMON', cost: tier }, ctx.controller, false);
+        const card = pick(s, pool);
+        if (card) yield* this.summon(ctx.controller, card.id);
+        me.voidSoulLevel = Math.min(10, tier + 1);
+        break;
+      }
+      case 'voidBlast': {
+        if (ctx.chosen === null) break;
+        const target = this.minion(ctx.chosen);
+        if (!target) break;
+        yield* this.damage(this.dmgSource(ctx), target.uid, 3 + (ctx.isSpell ? this.spellDamage(ctx.controller) : 0));
+        if (target.hp <= 0 || target.dead) this.addToHand(me, 'JAIL_732');
+        break;
+      }
+      case 'wardenMaiev': {
+        const target = ctx.it?.kind === 'char' ? this.minion(ctx.it.uid) : null;
+        if (!target || (target.dormantTurns ?? 0) > 0) break;
+        target.atkBuff += 3;
+        target.maxHp += 3;
+        target.hp += 3;
+        target.dormantTurns = 1;
+        target.sleeping = true;
+        target.attacks = 0;
+        this.recalcAuras();
+        break;
+      }
+      case 'demonicConfinement': {
+        if (ctx.chosen === null) break;
+        const target = this.minion(ctx.chosen);
+        if (!target) break;
+        const races = getCard(target.cardId).races ?? [];
+        if (target.owner === ctx.controller && (races.includes('DEMON') || races.includes('ALL'))) {
+          target.atkBuff += 3;
+          target.maxHp += 3;
+          target.hp += 3;
+        } else {
+          target.dormantTurns = 2;
+          target.sleeping = true;
+          target.attacks = 0;
+        }
+        this.recalcAuras();
+        break;
+      }
       case 'counter':
         this.spellCountered = true;
         break;
