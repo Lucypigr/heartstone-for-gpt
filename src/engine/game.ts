@@ -1172,6 +1172,18 @@ export class Game {
       } else this.log(p.id, `${this.name(def.id)}被反制了！`);
       p.spellsCastThisGame++;
       p.spellsThisTurn = (p.spellsThisTurn ?? 0) + 1;
+      // 紫羅蘭堡薩滿：這三張法術只計算「它們待在手牌時」看到的施法。
+      for (const held of p.hand) {
+        const trans = this.handDef(held).handTransformAfterSpells;
+        if (!trans) continue;
+        held.spellTransformProgress = (held.spellTransformProgress ?? 0) + 1;
+        if (held.spellTransformProgress >= trans.count) {
+          const before = held.cardId;
+          held.cardId = trans.into;
+          held.spellTransformProgress = undefined;
+          this.log(p.id, `${this.name(before)}變形成${this.name(trans.into)}`);
+        }
+      }
       yield* this.emit({ k: 'spellCast', player: p.id, cardId: def.id, subject: target, subjectKind: 'char' });
       yield* this.emit({ k: 'cardPlayed', player: p.id, cardType: 'SPELL', cardId: def.id, echo });
     } else if (def.type === 'HERO') {
