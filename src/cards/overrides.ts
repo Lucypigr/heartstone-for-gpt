@@ -116,6 +116,49 @@ export const OVERRIDES: Record<string, Override> = {
   },
   JAIL_986: { abilities: play(fn('franticForger')) },
   JAIL_706: { abilities: play(fn('thievesTools')) },
+  // 紫羅蘭堡：SI:7 潛行連動
+  CAP_000: {
+    keywords: ['STEALTH'],
+    abilities: [{ on: { k: 'attack', subject: 'friendlyMinion', keyword: 'STEALTH' }, effects: [{ e: 'buff', target: { t: 'it' }, atk: 2, hp: 2 }] }],
+  },
+  CAP_001: { target: chosenMinion, abilities: play(fn('silentStrike')) },
+  CAP_005: {
+    keywords: ['STEALTH'],
+    abilities: [{ on: { k: 'attack', subject: 'friendlyMinion', keyword: 'STEALTH' }, effects: [fn('si7RandomHandDiscount', { amount: 3 })] }],
+  },
+  CAP_006: { target: anyChar, abilities: play(fn('tricksOfTrade')) },
+
+  // 紫羅蘭堡：Follow 效果
+  CAP_002: { abilities: play(fn('follow', { kind: 'footsteps' })) },
+  CAP_101: { abilities: play(fn('follow', { kind: 'fuse' })) },
+  CAP_402: { abilities: play(fn('follow', { kind: 'evidence' })), tokens: ['CAP_400t2t'] },
+  CAP_802: { abilities: play(fn('follow', { kind: 'ghosts' })), tokens: ['CAP_802t'] },
+  CAP_802t: { keywords: ['REBORN'] },
+
+  // 紫羅蘭堡：Cannoneer 套件
+  CAP_103: { abilities: heroAttacked(fn('fireCannoneers')), tokens: ['CAP_107t'] },
+  CAP_104: {},
+  CAP_106: { abilities: play({ e: 'summon', card: 'CAP_107t', count: 2, who: 'self' }), tokens: ['CAP_107t'] },
+  CAP_107: { abilities: play({ e: 'addCard', card: 'CAP_107t', count: 1, who: 'self' }), tokens: ['CAP_107t'] },
+  CAP_107t: { abilities: [{ on: { k: 'turnEnd', whose: 'mine' }, effects: [fn('fireThisCannoneer')] }] },
+
+  // 紫羅蘭堡：Imp-formant 套件
+  CAP_400: { abilities: dr(fn('putImpInformants', { count: 2 })), tokens: ['CAP_400t2t'] },
+  CAP_401: { abilities: play(fn('corruptConstable')), tokens: ['CAP_400t2t'] },
+  CAP_403: { abilities: play(fn('frameJob')) },
+  CAP_404: {
+    abilities: play({ e: 'minionTax', amount: 2 }, fn('putImpInformants', { count: 2 })),
+    tokens: ['CAP_400t2t'],
+  },
+  CAP_406: {
+    abilities: play({
+      e: 'eternal',
+      ability: { on: { k: 'summon', side: 'friendly', cardId: 'CAP_400t2t' }, effects: [{ e: 'buff', target: { t: 'it' }, atk: 2, hp: 2 }] },
+    }),
+    tokens: ['CAP_400t2t'],
+  },
+  CAP_400t2t: { keywords: ['LIFESTEAL'], summonedWhenDrawnForOpponent: true },
+
   // 動物夥伴：隨機召喚米莎、雷歐克或霍弗
   NEW1_031: {
     abilities: [{ on: { k: 'play' }, effects: [{ e: 'custom', fn: 'summonOneOf', args: { cards: ['NEW1_032', 'NEW1_033', 'NEW1_034'] } }] }],
