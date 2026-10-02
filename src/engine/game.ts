@@ -921,7 +921,13 @@ export class Game {
   // 出牌
   // ==========================================================================
 
-  private *playCard(handUid: number, target: number | undefined, position: number | undefined, option: number | undefined): Gen {
+  private *playCard(
+    handUid: number,
+    target: number | undefined,
+    position: number | undefined,
+    option: number | undefined,
+    side: 'friendly' | 'enemy' = 'friendly',
+  ): Gen {
     const s = this.s;
     const p = s.players[s.current];
     const idx = p.hand.findIndex((h) => h.uid === handUid);
@@ -967,8 +973,10 @@ export class Game {
     } else this.log(p.id, `${p.name}打出了${this.name(def.id)}`);
     this.fx({ kind: 'play', cardId: def.id, player: p.id, target });
 
+    const boardOwner: PlayerId = def.type === 'MINION' && def.disguised && side === 'enemy' ? opp(p.id) : p.id;
     const ctx: Ctx = {
-      controller: p.id,
+      // 偽裝手下的「友方 / 敵方」效果以實際放置的場地為準。
+      controller: boardOwner,
       sourceUid: null,
       sourceCardId: def.id,
       isSpell: def.type === 'SPELL',
@@ -982,21 +990,23 @@ export class Game {
     const playAbilities = abilities.filter((a) => a.on.k === 'play');
 
     if (def.type === 'MINION') {
-      const m = this.makeMinion(p.id, transformInto ?? def.id, hc);
-      const pos = Math.max(0, Math.min(position ?? p.board.length, p.board.length));
-      p.board.splice(pos, 0, m);
+      const host = s.players[boardOwner];
+      const m = this.makeMinion(boardOwner, transformInto ?? def.id, hc);
+      const pos = Math.max(0, Math.min(position ?? host.board.length, host.board.length));
+      host.board.splice(pos, 0, m);
       ctx.sourceUid = m.uid;
       this.recalcAuras();
-      this.countSummon(p, m.cardId);
-      this.assemble(p, m);
-      this.fx({ kind: 'summon', uid: m.uid, cardId: m.cardId, player: p.id, played: true });
+      this.countSummon(host, m.cardId);
+      this.assemble(host, m);
+      this.fx({ kind: 'summon', uid: m.uid, cardId: m.cardId, player: boardOwner, played: true });
       if (def.races?.includes('ELEMENTAL')) p.elementalThisTurn = true;
       for (const ab of playAbilities) {
         if (ab.cond && !this.evalCond(ab.cond, ctx)) continue;
         yield* this.runEffects(ab.effects, ctx);
         if (this.over) return;
       }
-      yield* this.emit({ k: 'summon', player: p.id, subject: m.uid, races: def.races });
+      yield* this.emit({ k: 'summon', player: boardOwner, subject: m.uid, races: def.races });
+      // 「打出」仍屬於原本從手牌打牌的玩家；「召喚 / 場上友軍」屬於實際控制該手下的一方。
       yield* this.emit({ k: 'cardPlayed', player: p.id, subject: m.uid, cardType: 'MINION', races: def.races, cardId: def.id, echo });
       if (this.minion(m.uid)) yield* this.checkSecrets(opp(p.id), 'enemyPlaysMinion', { it: { kind: 'char', uid: m.uid } });
     } else if (def.type === 'SPELL') {
@@ -1079,15 +1089,14 @@ export class Game {
   }
 
   /**
-   * 預備：投入剩餘法力，永久減少「投入量 + 1」。
-   * 投入量最多到能把目前費用降到 0 所需要的數量；不算出牌，並鎖到下回合。
+   * 預備：官方規則會消耗「所有剩餘法力」，永久減少「消耗量 + 1」。
+   * 折扣可以超過目前費用（實際費用仍最低為 0）；不算出牌，並鎖到下回合。
    */
   private prepare(handUid: number) {
     const p = this.me;
     const hc = p.hand.find((h) => h.uid === handUid)!;
-    const currentCost = this.costOf(p, hc);
-    const spend = Math.min(p.mana, Math.max(1, currentCost - 1));
-    p.mana -= spend;
+    const spend = p.mana;
+    p.mana = 0;
     hc.prepareDiscount = (hc.prepareDiscount ?? 0) + spend + 1;
     hc.prepared = true;
     hc.preparedTurn = this.s.turn;
