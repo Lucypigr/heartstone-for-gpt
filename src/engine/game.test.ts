@@ -175,6 +175,73 @@ describe('2026：賄賂（Bribe）', () => {
   });
 });
 
+describe('2026：紫羅蘭堡批次復原（二）', () => {
+  it('SI:7 潛行手下攻擊會觸發 Slayer，並讓 Tricks of the Trade 變成 3 傷害', () => {
+    const g = newGame();
+    const p = g.s.players[0];
+    p.board = [];
+    g.s.players[1].board = [];
+    put(g, 'CAP_000', 0);
+    const attacker = put(g, 'CAP_005', 0);
+    const foe = put(g, 'CS2_182', 1);
+    const trick = g.newHandCard('CAP_006');
+    p.hand.push(trick);
+    p.mana = 10;
+    const beforeAtk = g.atkOf(attacker);
+    expect(g.apply({ type: 'attack', attacker: attacker.uid, target: foe.uid })).toBe(true);
+    expect(g.atkOf(attacker)).toBeGreaterThanOrEqual(beforeAtk + 2);
+    expect(trick.stealthAttackSeen).toBe(true);
+    const enemyHero = g.s.players[1].hero;
+    const beforeHp = enemyHero.hp;
+    expect(g.apply({ type: 'play', handUid: trick.uid, target: enemyHero.uid })).toBe(true);
+    expect(enemyHero.hp).toBe(beforeHp - 3);
+  });
+
+  it('Follow the Footsteps 會把相同 Follow 效果附在發現的潛行手下上，本回合結束後失效', () => {
+    const g = newGame();
+    const p = g.s.players[0];
+    const uid = give(g, 'CAP_002');
+    expect(g.apply({ type: 'play', handUid: uid })).toBe(true);
+    expect(g.s.pendingChoice).not.toBeNull();
+    expect(g.apply({ type: 'choose', index: 0 })).toBe(true);
+    const attached = p.hand.find((h) => h.grantedPlayEffects?.length);
+    expect(attached).toBeTruthy();
+    expect(getCard(attached!.cardId).keywords?.includes('STEALTH')).toBe(true);
+    g.apply({ type: 'endTurn' });
+    expect(attached?.grantedPlayEffects).toBeUndefined();
+  });
+
+  it('Cannoneer 在回合結束射擊；Captain Crowley 讓每個 Cannoneer 多射一發', () => {
+    const g = newGame();
+    const p = g.s.players[0];
+    p.board = [];
+    g.s.players[1].board = [];
+    put(g, 'CAP_107t', 0);
+    put(g, 'CAP_106', 0);
+    const enemy = put(g, 'CS2_182', 1);
+    const before = enemy.hp;
+    g.apply({ type: 'endTurn' });
+    expect(enemy.hp).toBe(before - 2);
+  });
+
+  it('Imp-formant 從敵方牌庫抽到時會替其對手召喚，並保留牌庫增益', () => {
+    const g = newGame();
+    const me = g.s.players[0];
+    const foe = g.s.players[1];
+    me.board = [];
+    foe.board = [];
+    const imp = g.newHandCard('CAP_400t2t');
+    imp.atkBuff = 2;
+    imp.hpBuff = 2;
+    foe.deck = [g.newHandCard('CS2_182'), imp];
+    g.s.current = 0;
+    g.apply({ type: 'endTurn' });
+    const summoned = me.board.find((m) => m.cardId === 'CAP_400t2t');
+    expect(summoned).toBeTruthy();
+    expect(g.atkOf(summoned!)).toBeGreaterThanOrEqual(5);
+  });
+});
+
 describe('2026：紫羅蘭堡批次復原（一）', () => {
   it('孤獨囚犯在雙方場上都沒有手下時消耗為 2', () => {
     const g = newGame();
