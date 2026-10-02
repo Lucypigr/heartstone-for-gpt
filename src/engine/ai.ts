@@ -6,7 +6,7 @@
 import { getCard } from '../cards/registry';
 import { Game, opp } from './game';
 import { nextRandom, pick } from './rng';
-import type { Action, GameState, Minion, PlayerId } from './state';
+import { MAX_BOARD, type Action, type GameState, type Minion, type PlayerId } from './state';
 
 export type Difficulty = 'easy' | 'normal' | 'hard';
 
@@ -21,11 +21,16 @@ export function legalActions(g: Game): Action[] {
     const options = def.chooseOne ? def.chooseOne.map((_o, i) => i) : [undefined];
     for (const option of options) {
       if (!g.canPlay(hc.uid, option).ok) continue;
-      const req = g.playTargetReq(hc.uid, option);
-      const targets = req ? g.validTargets(req, s.current, def.type === 'SPELL') : [];
-      if (req && targets.length) {
-        for (const t of targets) out.push({ type: 'play', handUid: hc.uid, target: t, option });
-      } else if (!req || req.optional) out.push({ type: 'play', handUid: hc.uid, option });
+      const sides: ('friendly' | 'enemy')[] = def.type === 'MINION' && def.disguised ? ['friendly', 'enemy'] : ['friendly'];
+      for (const side of sides) {
+        const boardOwner = side === 'enemy' ? opp(s.current) : s.current;
+        if (def.type === 'MINION' && s.players[boardOwner].board.length >= MAX_BOARD) continue;
+        const req = g.playTargetReq(hc.uid, option);
+        const targets = req ? g.validTargets(req, boardOwner, def.type === 'SPELL') : [];
+        if (req && targets.length) {
+          for (const t of targets) out.push({ type: 'play', handUid: hc.uid, target: t, option, side });
+        } else if (!req || req.optional) out.push({ type: 'play', handUid: hc.uid, option, side });
+      }
     }
   }
   if (g.canHeroPower()) {
