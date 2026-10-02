@@ -114,6 +114,52 @@ describe('法術', () => {
   });
 });
 
+describe('2026：第二英雄能力（血腥醫生薩蕾娜）', () => {
+  it('戰吼解鎖吸血鬼之吻，消耗 3 屍體並賦予手下 +3 攻擊力，與原英雄能力獨立', () => {
+    const g = newGame();
+    const p = g.s.players[0];
+    const uid = give(g, 'JAIL_446');
+    p.mana = 10;
+    expect(g.apply({ type: 'play', handUid: uid, position: 0 })).toBe(true);
+
+    expect(p.secondaryHeroPower?.id).toBe('JAIL_446hp');
+    expect(p.secondaryHeroPower?.used).toBe(false);
+
+    p.corpses = 5;
+    const target = put(g, 'CS2_182', 0);
+    const beforeAtk = g.atkOf(target);
+    expect(g.canSecondaryHeroPower()).toBe(true);
+    expect(g.apply({ type: 'secondaryHeroPower', target: target.uid })).toBe(true);
+    expect(p.corpses).toBe(2);
+    expect(p.corpsesSpent).toBe(3);
+    expect(g.atkOf(target)).toBe(beforeAtk + 3);
+    expect(p.secondaryHeroPower?.used).toBe(true);
+    expect(p.heroPower.used).toBe(false);
+
+    // 原英雄能力仍可獨立使用。
+    const enemyHero = g.s.players[1].hero;
+    expect(g.apply({ type: 'heroPower', target: enemyHero.uid })).toBe(true);
+    expect(p.heroPower.used).toBe(true);
+  });
+
+  it('第二英雄能力每個自己的回合會獨立重置一次', () => {
+    const g = newGame();
+    const p = g.s.players[0];
+    const uid = give(g, 'JAIL_446');
+    p.mana = 10;
+    expect(g.apply({ type: 'play', handUid: uid, position: 0 })).toBe(true);
+    p.corpses = 6;
+    const target = put(g, 'CS2_182', 0);
+    expect(g.apply({ type: 'secondaryHeroPower', target: target.uid })).toBe(true);
+    expect(g.canSecondaryHeroPower()).toBe(false);
+
+    g.apply({ type: 'endTurn' });
+    g.apply({ type: 'endTurn' });
+    expect(p.secondaryHeroPower?.used).toBe(false);
+    expect(g.canSecondaryHeroPower()).toBe(true);
+  });
+});
+
 describe('2026：開局效果（Start of Game）', () => {
   it('破鏈者霍格會在起手抽牌前複製牌庫中的其他傳說卡，但不複製自己', () => {
     const deck = [
