@@ -243,6 +243,9 @@ export class Game {
     s.first = o.first ?? (nextRandom(s) < 0.5 ? 0 : 1);
     s.current = s.first;
     const second = opp(s.first);
+    // 「開局」在起手牌抽取前結算，讓改牌庫 / 初始資源的 Rulebreaker
+    // 正確影響玩家接下來看到的起手牌。
+    game.drive(game.wrap(game.startGameEffects()));
     for (let i = 0; i < 3; i++) game.drawRaw(s.players[s.first]);
     for (let i = 0; i < 4; i++) game.drawRaw(s.players[second]);
     game.log(null, `${s.players[s.first].name}先攻`);
@@ -805,6 +808,27 @@ export class Game {
   // ==========================================================================
   // 起手換牌與回合
   // ==========================================================================
+
+  /** 結算牌庫中的 Start of Game；每張起始牌庫實體最多觸發一次。 */
+  private *startGameEffects(): Gen {
+    const order: PlayerId[] = [this.s.first, opp(this.s.first)];
+    for (const pid of order) {
+      const p = this.s.players[pid];
+      const starting = [...p.deck];
+      for (const hc of starting) {
+        const def = this.handDef(hc);
+        for (const ab of def.abilities ?? []) {
+          if (ab.on.k !== 'startGame') continue;
+          const ctx = this.baseCtx(pid);
+          ctx.sourceCardId = def.id;
+          if (ab.cond && !this.evalCond(ab.cond, ctx, hc.uid)) continue;
+          this.log(pid, `${p.name}觸發了${this.name(def.id)}的開局效果`);
+          yield* this.runEffects(ab.effects, ctx);
+          if (this.over) return;
+        }
+      }
+    }
+  }
 
   private mulligan(player: PlayerId, replace: number[]): boolean {
     const s = this.s;
@@ -1946,6 +1970,8 @@ export class Game {
     const rel = (side: Side) => side === 'any' || (side === 'friendly') === (ev.player === owner);
     const raceOk = (r?: Race) => !r || !!ev.races?.includes(r) || !!ev.races?.includes('ALL');
     switch (trig.k) {
+      case 'startGame':
+        return ev.player === owner;
       case 'turnEnd':
       case 'turnStart':
         return trig.whose === 'each' || (trig.whose === 'mine') === (ev.player === owner);
