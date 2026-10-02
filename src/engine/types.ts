@@ -438,6 +438,8 @@ export interface CardDef {
   terran?: boolean;
   /** 發射過星艦後，手牌與牌堆中的這張卡會變形成另一張卡 */
   launchTransform?: string;
+  /** 預備：可把剩餘法力投資成永久減費，且預備當回合不能打出 */
+  prepare?: boolean;
   /** 腐化：在手牌中打出更高目前費用的卡後，變形成官方已腐化版本 */
   corruptInto?: string;
   /** 可無限再次腐化：每次腐化保留卡牌並增加手牌數值 */
