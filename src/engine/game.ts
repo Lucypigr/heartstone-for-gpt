@@ -434,7 +434,9 @@ export class Game {
     const enrage = c.enrageAtk && c.hp < c.maxHp ? c.enrageAtk : 0;
     const linger = c.lingerAtk?.reduce((x, l) => x + l.amount, 0) ?? 0;
     const bonus = this.s.players[c.owner].minionAtkBonus ?? 0;
-    return Math.max(0, c.baseAtk + c.atkBuff + c.tempAtk + c.auraAtk + enrage + linger + bonus);
+    const def = getCard(c.cardId);
+    const conditional = def.atkIf && this.evalCond(def.atkIf.cond, { ...this.baseCtx(c.owner), sourceUid: c.uid, sourceCardId: c.cardId }) ? def.atkIf.amount : 0;
+    return Math.max(0, c.baseAtk + c.atkBuff + c.tempAtk + c.auraAtk + enrage + linger + bonus + conditional);
   }
 
   spellDamage(p: PlayerId): number {
@@ -1107,10 +1109,13 @@ export class Game {
         if (def.secret) {
           p.secrets.push({ uid: this.uid(), cardId: def.id });
         } else {
-          for (const ab of playAbilities) {
-            if (ab.cond && !this.evalCond(ab.cond, ctx)) continue;
-            yield* this.runEffects(ab.effects, ctx);
-            if (this.over) return;
+          const casts = hc.castTwice ? 2 : 1;
+          for (let cast = 0; cast < casts; cast++) {
+            for (const ab of playAbilities) {
+              if (ab.cond && !this.evalCond(ab.cond, ctx)) continue;
+              yield* this.runEffects(ab.effects, ctx);
+              if (this.over) return;
+            }
           }
         }
       } else this.log(p.id, `${this.name(def.id)}被反制了！`);
@@ -2088,6 +2093,8 @@ export class Game {
           (!trig.cardType || trig.cardType === ev.cardType) &&
           raceOk(trig.race) &&
           (trig.keyword !== 'ECHO' || !!ev.echo) &&
+          (!trig.hasBattlecry || (!!ev.cardId && !!getCard(ev.cardId).abilities?.some((a) => a.on.k === 'play'))) &&
+          (!trig.hasDeathrattle || (!!ev.cardId && !!getCard(ev.cardId).abilities?.some((a) => a.on.k === 'deathrattle'))) &&
           ev.subject !== holderUid
         );
       case 'summon':
@@ -2279,6 +2286,9 @@ export class Game {
       const races = getCard(c.cardId).races ?? [];
       if (!races.includes(f.race) && !races.includes('ALL')) return false;
     }
+    if (f.cardClass) {
+      if (hero || !cardClasses(getCard(c.cardId)).includes(f.cardClass)) return false;
+    }
     if (f.damaged && c.hp >= c.maxHp) return false;
     if (f.undamaged && c.hp < c.maxHp) return false;
     if (f.maxAttack !== undefined && this.atkOf(c) > f.maxAttack) return false;
@@ -2361,6 +2371,15 @@ export class Game {
         return c.op === '>=' ? p.deck.length >= c.n : p.deck.length <= c.n;
       case 'deckNoNeutral':
         return p.deck.every((h) => !cardClasses(getCard(h.cardId)).includes('NEUTRAL'));
+      case 'noMinions':
+        return this.s.players[0].board.every((m) => !this.alive(m)) && this.s.players[1].board.every((m) => !this.alive(m));
+      case 'itCostMax': {
+        if (ctx.it?.kind !== 'hand') return false;
+        const found = this.handCard(ctx.it.uid);
+        return !!found && this.costOf(this.s.players[found.player], found.card) <= c.n;
+      }
+      case 'spellsThisTurnAtLeast':
+        return (p.spellsThisTurn ?? 0) >= c.n;
       case 'maxMana':
         return p.maxMana >= c.n;
       case 'opponentTurn':
@@ -2831,7 +2850,8 @@ export class Game {
           if (!hc) break;
           me.deck.splice(me.deck.indexOf(hc), 1);
           this.log(me.id, `號召了${this.name(hc.cardId)}`);
-          yield* this.doSummon(ctx, ctx.controller, hc.cardId);
+          const recruited = yield* this.doSummon(ctx, ctx.controller, hc.cardId);
+          if (recruited && e.keywords?.length) for (const k of e.keywords) if (!recruited.keywords.includes(k)) recruited.keywords.push(k);
         }
         break;
       case 'spendCorpses':
@@ -3082,6 +3102,70 @@ export class Game {
         for (const uid of mine) {
           const card = pick(s, this.randomPool({ type: 'MINION', cost: 3 }, me.id, false));
           if (card && this.minion(uid)) this.transform(uid, card.id);
+        }
+        break;
+      }
+      case 'destroyNonClassMinions': {
+        const cls = args.class as CardClass;
+        for (const m of [...s.players[0].board, ...s.players[1].board]) {
+          if (!cardClasses(getCard(m.cardId)).includes(cls)) m.dead = true;
+        }
+        break;
+      }
+      case 'markItCastTwice': {
+        if (ctx.it?.kind === 'hand') {
+          const found = this.handCard(ctx.it.uid);
+          if (found) found.card.castTwice = true;
+        }
+        break;
+      }
+      case 'releaseTheBeasts': {
+        for (const h of me.hand) {
+          if (getCard(h.cardId).type !== 'MINION') continue;
+          h.atkBuff += 1;
+          h.hpBuff += 1;
+          if (getCard(h.cardId).rarity === 'LEGENDARY') {
+            h.atkBuff += 2;
+            h.hpBuff += 1;
+          }
+        }
+        break;
+      }
+      case 'triggerChosenDeathrattle': {
+        if (ctx.chosen === null) break;
+        const m = this.minion(ctx.chosen);
+        if (m) yield* this.runDeathrattles(m);
+        break;
+      }
+      case 'destroyRandomAdjacent': {
+        const src = ctx.sourceUid !== null ? this.minion(ctx.sourceUid) : null;
+        if (!src) break;
+        const target = pick(s, this.adjacent(src));
+        if (target) target.dead = true;
+        break;
+      }
+      case 'spitefulChef': {
+        const cost = me.maxMana >= 10 ? 6 : 2;
+        const card = pick(s, this.randomPool({ type: 'MINION', cost, keyword: 'TAUNT' }, ctx.controller, false));
+        if (card) yield* this.doSummon(ctx, ctx.controller, card.id);
+        break;
+      }
+      case 'franticForger': {
+        const spells = this.randomPool({ type: 'SPELL' }, ctx.controller, true).filter((c) => c.cost <= me.mana);
+        const card = pick(s, spells);
+        if (card) {
+          const hc = this.addToHand(me, card.id);
+          if (hc) hc.temporary = true;
+        }
+        break;
+      }
+      case 'thievesTools': {
+        const pool = this.randomPool({ type: 'SPELL', cost: 4 }, ctx.controller, true);
+        for (let i = 0; i < 2; i++) {
+          const c = pick(s, pool);
+          if (!c) break;
+          const hc = this.addToHand(me, c.id);
+          if (hc) hc.costMod -= 2;
         }
         break;
       }
