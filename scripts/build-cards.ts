@@ -132,6 +132,11 @@ async function main() {
     byName.get(en)!.push(r);
   }
 
+  for (const id of ['JAIL_913', 'JAIL_998', 'JAIL_453']) {
+    const r = byId.get(id);
+    if (r) console.log('PREPDBG', id, JSON.stringify(r.tags), JSON.stringify(r.strs.CARDTEXT?.enUS ?? ''));
+  }
+
   const typeOf = (r: RawCard) => TYPE_MAP[r.tags.CARDTYPE];
   const hasKw = (r: RawCard, k: Keyword) => KEYWORD_TAGS.some(([tag, kw]) => kw === k && r.tags[tag]);
 
