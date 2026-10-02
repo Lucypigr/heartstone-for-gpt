@@ -300,6 +300,44 @@ describe('2026：紫羅蘭堡批次復原（一）', () => {
   });
 });
 
+describe('2026：紫羅蘭堡薩滿法術變形', () => {
+  it('Molten Gold / Frostshatter / Stormfury 各自在手牌看到 3 次施法後變形成元素', () => {
+    const g = newGame();
+    const p = g.s.players[0];
+    p.hand = [];
+    p.mana = 20;
+    const a = give(g, 'JAIL_801');
+    const b = give(g, 'JAIL_803');
+    const c = give(g, 'JAIL_805');
+    // 用 3 張不需要目標的簡單法術觸發手牌計數。
+    for (let i = 0; i < 3; i++) {
+      const uid = give(g, 'GAME_005');
+      p.mana = 20;
+      expect(g.apply({ type: 'play', handUid: uid })).toBe(true);
+    }
+    expect(p.hand.find((h) => h.uid === a)?.cardId).toBe('JAIL_801t');
+    expect(p.hand.find((h) => h.uid === b)?.cardId).toBe('JAIL_803t');
+    expect(p.hand.find((h) => h.uid === c)?.cardId).toBe('JAIL_805t');
+  });
+
+  it('法術在進手牌之前施放的不計入進度', () => {
+    const g = newGame();
+    const p = g.s.players[0];
+    p.mana = 20;
+    for (let i = 0; i < 2; i++) {
+      const uid = give(g, 'GAME_005');
+      expect(g.apply({ type: 'play', handUid: uid })).toBe(true);
+    }
+    const uid = give(g, 'JAIL_801');
+    for (let i = 0; i < 2; i++) {
+      p.mana = 20;
+      const coin = give(g, 'GAME_005');
+      expect(g.apply({ type: 'play', handUid: coin })).toBe(true);
+    }
+    expect(p.hand.find((h) => h.uid === uid)?.cardId).toBe('JAIL_801');
+  });
+});
+
 describe('2026：伊莉妲‧逐罪者（Void draw rule）', () => {
   it('戰吼把牌庫送入虛無但保留 1 張；下個自己的回合額外從虛無取得 2 張，仍正常抽牌', () => {
     const g = newGame();
