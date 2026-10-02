@@ -293,11 +293,9 @@ async function main() {
     if (r.tags.CASTS_WHEN_DRAWN) def.castsWhenDrawn = true;
     if (r.tags.STARSHIP) def.starship = true;
     if (r.tags.TERRAN) def.terran = true;
-    // PREPARE 標籤也會出現在「When you Prepare...」的關聯卡。
-    // 只有卡面本身以 Prepare 開頭，才代表這張牌能執行預備動作。
-    const printedEn = r.strs.CARDTEXT?.enUS ?? '';
-    const isPrepareCard = /^Prepare(?:\b|[,.])/i.test(normalizeText(printedEn));
-    if (r.tags.PREPARE && isPrepareCard) def.prepare = true;
+    // PREPARE 也可能只是「當你預備時」的關聯標籤；真正能執行牌堆動作的牌
+    // 會同時帶 DECK_ACTION_COST。官方 JAIL_913 / JAIL_998 皆為 PREPARE=1 + DECK_ACTION_COST=1。
+    if (r.tags.PREPARE && r.tags.DECK_ACTION_COST) def.prepare = true;
     // 死亡騎士的符文需求
     if (r.tags.COST_BLOOD || r.tags.COST_FROST || r.tags.COST_UNHOLY) {
       def.runes = {};
