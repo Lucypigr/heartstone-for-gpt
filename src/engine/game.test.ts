@@ -300,6 +300,56 @@ describe('2026：紫羅蘭堡批次復原（一）', () => {
   });
 });
 
+describe('2026：紫羅蘭堡手牌調查與變形', () => {
+  it('Ancient Augur 標記對手手牌，死亡時棄掉同一張實體', () => {
+    const g = newGame();
+    const foe = g.s.players[1];
+    foe.hand = [g.newHandCard('CS2_182'), g.newHandCard('CS2_231'), g.newHandCard('CS2_029')];
+    g.s.players[0].mana = 10;
+    const uid = give(g, 'JAIL_303');
+    expect(g.apply({ type: 'play', handUid: uid, position: 0 })).toBe(true);
+    expect(g.s.pendingChoice?.options).toHaveLength(3);
+    expect(g.apply({ type: 'choose', index: 0 })).toBe(true);
+    const augur = g.s.players[0].board.find((m) => m.cardId === 'JAIL_303')!;
+    const marked = augur.markedHandUid!;
+    augur.dead = true;
+    g.apply({ type: 'endTurn' });
+    expect(foe.hand.some((h) => h.uid === marked)).toBe(false);
+  });
+
+  it('Bootleg Alchemist 把手牌變成高 5 費法術但維持原本實際費用', () => {
+    const g = newGame();
+    const p = g.s.players[0];
+    p.hand = [];
+    const chosenUid = give(g, 'CS2_182');
+    const before = g.costOf(p, p.hand.find((h) => h.uid === chosenUid)!);
+    p.mana = 10;
+    const uid = give(g, 'JAIL_313');
+    expect(g.apply({ type: 'play', handUid: uid, position: 0 })).toBe(true);
+    expect(g.s.pendingChoice).not.toBeNull();
+    expect(g.apply({ type: 'choose', index: 0 })).toBe(true);
+    const transformed = p.hand.find((h) => h.uid === chosenUid)!;
+    expect(getCard(transformed.cardId).type).toBe('SPELL');
+    expect(g.costOf(p, transformed)).toBe(before);
+  });
+
+  it('Inspector Murloc Holmes 猜中對手下一回合打出的同名卡時獲得 3 Coins', () => {
+    const g = newGame();
+    const me = g.s.players[0];
+    const foe = g.s.players[1];
+    foe.hand = [g.newHandCard('CS2_182')];
+    me.mana = 10;
+    const uid = give(g, 'JAIL_851');
+    expect(g.apply({ type: 'play', handUid: uid, position: 0 })).toBe(true);
+    expect(g.apply({ type: 'choose', index: 0 })).toBe(true);
+    g.apply({ type: 'endTurn' });
+    foe.mana = 10;
+    const target = foe.hand[0];
+    expect(g.apply({ type: 'play', handUid: target.uid, position: 0 })).toBe(true);
+    expect(me.hand.filter((h) => h.cardId === 'GAME_005')).toHaveLength(3);
+  });
+});
+
 describe('2026：紫羅蘭堡剩餘通用機制', () => {
   it('Violet Punisher 偷走可偷關鍵字，並每個獲得 +1/+1', () => {
     const g = newGame();
