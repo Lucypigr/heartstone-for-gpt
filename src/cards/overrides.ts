@@ -81,10 +81,13 @@ export const OVERRIDES: Record<string, Override> = {
   },
   JAIL_202: { auras: [{ scope: 'friendlyHero', atk: 1 }] },
   JAIL_204: { costIf: { cond: { c: 'noMinions' }, cost: 2 } },
+  JAIL_303: { abilities: [...play(fn('ancientAugur')), ...dr(fn('ancientAugurDiscard'))] },
   JAIL_307: {
     costIf: { cond: { c: 'deckSize', op: '>=', n: 25 }, cost: 3 },
     abilities: play({ e: 'repeat', times: 2, effects: [{ e: 'damage', target: { t: 'all', filter: { type: 'minion', side: 'any' } }, amount: 2, spell: true }] }),
   },
+  JAIL_313: { abilities: play(fn('bootlegAlchemist')) },
+  JAIL_851: { abilities: play(fn('inspectEnemyHand')), tokens: ['GAME_005'] },
   JAIL_311: { atkIf: { cond: { c: 'deckSize', op: '>=', n: 25 }, amount: 5 } },
   JAIL_329: {
     abilities: heroAttacked({ e: 'buff', target: { t: 'all', filter: { type: 'minion', side: 'friendly', cardClass: 'PALADIN' } }, atk: 2, hp: 2 }),
