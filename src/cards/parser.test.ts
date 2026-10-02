@@ -64,6 +64,12 @@ describe('卡牌敘述解析', () => {
     expect(st.abilities[0].effects[0]).toMatchObject({ e: 'buff', keywords: ['STEALTH'], untilNextTurn: true });
   });
 
+  it('榮譽擊殺會解析成獨立的精準致死觸發', () => {
+    const r = parse('<b>Honorable Kill:</b> Gain +2 Attack.');
+    expect(r.abilities[0].on).toEqual({ k: 'honorableKill' });
+    expect(r.abilities[0].effects[0]).toMatchObject({ e: 'buff', target: { t: 'self' }, atk: 2 });
+  });
+
   it('看不懂的敘述會回報不支援', () => {
     expect(() => parse('Swap your hand with your opponent\'s hand.')).toThrow(Unsupported);
     expect(() => parse('<b>Battlecry:</b> Do something weird.')).toThrow(Unsupported);
