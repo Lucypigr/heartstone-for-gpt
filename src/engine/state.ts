@@ -168,6 +168,8 @@ export interface PlayerState {
   heroHealedTurn?: number;
   /** 回合結束時加入手牌的卡 */
   endOfTurnCards?: string[];
+  /** 伊莉妲‧逐罪者：從牌庫送入虛無、之後每回合取回的牌 */
+  voidDeck?: HandCard[];
   /** 洗進對手牌堆的瘟疫數 */
   plaguesShuffled?: number;
   fatigue: number;
