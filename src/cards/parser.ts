@@ -1519,6 +1519,17 @@ export function parseCardText(input: ParseInput, env: ParseEnv): ParsedCard {
       current = null;
       continue;
     }
+    // 已腐化衍生卡常寫成「Corrupted Rush, Divine Shield」，
+    // 必須先移除純顯示標記，才能讓後面的關鍵字迴圈解析。
+    const leadingCorrupted = /^Corrupted(?:[:.]? |$)/.exec(raw);
+    if (leadingCorrupted) {
+      raw = raw.slice(leadingCorrupted[0].length).trim();
+      if (!raw) {
+        current = null;
+        continue;
+      }
+    }
+
     // 句首的關鍵字（如「嘲諷 戰吼：…」）
     for (;;) {
       const kl = new RegExp(`^(${KEYWORD_RE}|Tradeable|Echo|Twinspell)(?:,? |$)`).exec(raw);
