@@ -54,6 +54,18 @@ export const OVERRIDES: Record<string, Override> = {
   JAIL_719: {
     abilities: play(fn('sendDeckToVoidExceptOne')),
   },
+  // 賄賂牌：強力效果 + 給對手補償。這些效果共用現有「對手資源」能力與少量專用流程。
+  JAIL_206: { abilities: play(fn('darkBribe')) },
+  JAIL_861: { abilities: play(fn('noxiousBribe')) },
+  CATA_EVENT_402: {
+    target: chosenMinion,
+    abilities: [
+      { on: { k: 'play' }, effects: [{ e: 'destroy', target: { t: 'chosen' } }, { e: 'addCard', card: 'GAME_005', count: 1, who: 'opponent' }] },
+      { on: { k: 'play' }, cond: { c: 'combo' }, effects: [{ e: 'addCard', card: 'GAME_005', count: 1, who: 'self' }] },
+    ],
+    tokens: ['GAME_005'],
+  },
+  JAIL_EVENT_102: { abilities: play(fn('desperateBribe')) },
   // 動物夥伴：隨機召喚米莎、雷歐克或霍弗
   NEW1_031: {
     abilities: [{ on: { k: 'play' }, effects: [{ e: 'custom', fn: 'summonOneOf', args: { cards: ['NEW1_032', 'NEW1_033', 'NEW1_034'] } }] }],
