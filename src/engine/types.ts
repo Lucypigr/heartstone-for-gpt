@@ -440,6 +440,10 @@ export interface CardDef {
   launchTransform?: string;
   /** 預備：可把剩餘法力投資成永久減費，且預備當回合不能打出 */
   prepare?: boolean;
+  /** 開局效果：在起手抽牌前、洗牌前執行 */
+  startOfGame?: Effect[];
+  /** 某些開局效果（例如破鏈者霍格）規定必須在其他開局效果後執行 */
+  startOfGameLast?: boolean;
   /** 偽裝／自由放置：這張手下可打到自己或對手的場上 */
   disguised?: boolean;
   /** 碎裂：進入手牌時分裂成左右兩個官方半片 */
