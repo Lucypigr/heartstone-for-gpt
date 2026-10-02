@@ -440,6 +440,10 @@ export interface CardDef {
   launchTransform?: string;
   /** 預備：可把剩餘法力投資成永久減費，且預備當回合不能打出 */
   prepare?: boolean;
+  /** 碎裂：進入手牌時分裂成左右兩個官方半片 */
+  shatter?: { left: string; right: string };
+  /** 碎裂半片：記錄可與哪一張另一半重組回原卡 */
+  shatteredFrom?: { root: string; side: 'left' | 'right' };
   /** 腐化：在手牌中打出更高目前費用的卡後，變形成官方已腐化版本 */
   corruptInto?: string;
   /** 可無限再次腐化：每次腐化保留卡牌並增加手牌數值 */
