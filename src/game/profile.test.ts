@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { getCard } from '../cards/registry';
 import { validateDeck } from './decks';
-import { LEGENDARY_PITY, WIN_REWARD, DAILY_FIRST_WIN_BONUS } from './economy';
-import { buyPacks, craftCard, disenchantCard, disenchantExtras, newProfile, openPack, recordMatch, rollPack, sanitizeProfile } from './profile';
+import { LEGENDARY_PITY, WIN_REWARD, DAILY_FIRST_WIN_BONUS, YIHO_REWARD_GOLD } from './economy';
+import { buyPacks, craftCard, disenchantCard, disenchantExtras, newProfile, openPack, recordMatch, redeemRewardCode, rollPack, sanitizeProfile } from './profile';
 import { PACKS, packById } from './sets';
 
 function seeded(seed: number) {
@@ -90,5 +90,34 @@ describe('對戰獎勵', () => {
     const r2 = recordMatch(r1.profile, 'win', 'normal', 'MAGE', 'WARRIOR', '2026-1-1');
     expect(r2.gold).toBe(WIN_REWARD.normal);
     expect(r2.profile.wins).toBe(2);
+  });
+});
+
+
+describe('獎勵碼', () => {
+  it('輸入 Yiho 每次都獲得 50,000 金幣，而且可以重複兌換', () => {
+    const p = { ...newProfile(), gold: 100 };
+    const first = redeemRewardCode(p, 'Yiho');
+    expect(first.ok).toBe(true);
+    expect(first.reward).toBe(YIHO_REWARD_GOLD);
+    expect(first.profile.gold).toBe(100 + YIHO_REWARD_GOLD);
+
+    const second = redeemRewardCode(first.profile, 'Yiho');
+    expect(second.ok).toBe(true);
+    expect(second.profile.gold).toBe(100 + YIHO_REWARD_GOLD * 2);
+  });
+
+  it('錯誤獎勵碼不會增加金幣，Yiho 區分大小寫', () => {
+    const p = { ...newProfile(), gold: 321 };
+    expect(redeemRewardCode(p, 'yiho')).toMatchObject({ ok: false, reward: 0 });
+    expect(redeemRewardCode(p, 'NOPE')).toMatchObject({ ok: false, reward: 0 });
+    expect(redeemRewardCode(p, 'NOPE').profile.gold).toBe(321);
+  });
+
+  it('允許輸入前後空白但仍可重複兌換', () => {
+    const p = { ...newProfile(), gold: 0 };
+    const r = redeemRewardCode(p, '  Yiho  ');
+    expect(r.ok).toBe(true);
+    expect(r.profile.gold).toBe(YIHO_REWARD_GOLD);
   });
 });
