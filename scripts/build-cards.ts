@@ -295,7 +295,7 @@ async function main() {
     if (r.tags.TERRAN) def.terran = true;
     // PREPARE 也可能只是「當你預備時」的關聯標籤；真正能執行牌堆動作的牌
     // 會同時帶 DECK_ACTION_COST。官方 JAIL_913 / JAIL_998 皆為 PREPARE=1 + DECK_ACTION_COST=1。
-    if (r.tags.PREPARE && r.tags.DECK_ACTION_COST) def.prepare = true;
+    if (r.tags.PREPARE && (r.tags.DECK_ACTION_COST || r.tags['1743'])) def.prepare = true;
     // 死亡騎士的符文需求
     if (r.tags.COST_BLOOD || r.tags.COST_FROST || r.tags.COST_UNHOLY) {
       def.runes = {};
