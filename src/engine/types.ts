@@ -69,6 +69,8 @@ export interface Filter {
   /** 預設為 character（英雄 + 手下） */
   type?: 'minion' | 'hero' | 'character';
   race?: Race;
+  /** 指定卡牌職業（例如「你的聖騎士手下」） */
+  cardClass?: CardClass;
   /** 排除效果來源本身 */
   excludeSelf?: boolean;
   damaged?: boolean;
@@ -168,6 +170,9 @@ export type Condition =
   | { c: 'handSize'; op: '>=' | '<='; n: number }
   | { c: 'deckSize'; op: '>=' | '<='; n: number }
   | { c: 'deckNoNeutral' }
+  | { c: 'noMinions' }
+  | { c: 'itCostMax'; n: number }
+  | { c: 'spellsThisTurnAtLeast'; n: number }
   | { c: 'maxMana'; n: number }
   | { c: 'opponentTurn' }
   | { c: 'secret' }
@@ -271,7 +276,7 @@ export type Effect =
   /** 召喚一個翠玉魔像（每召喚一個，下一個就 +1/+1） */
   | { e: 'summonJade' }
   /** 號召：從你的牌堆召喚符合條件的手下 */
-  | { e: 'recruit'; count: number; race?: Race; cost?: number; maxCost?: number }
+  | { e: 'recruit'; count: number; race?: Race; cost?: number; maxCost?: number; keywords?: Keyword[] }
   | { e: 'costMod'; amount: number; scope: 'discovered' | 'it' }
   /** 對手的手下在他的下個回合消耗增加 */
   | { e: 'minionTax'; amount: number }
@@ -297,7 +302,7 @@ export type Trig =
   | { k: 'turnEnd'; whose: 'mine' | 'opp' | 'each' }
   | { k: 'turnStart'; whose: 'mine' | 'opp' | 'each' }
   | { k: 'spellCast'; side: Side; school?: string }
-  | { k: 'cardPlayed'; side: Side; cardType?: CardType; race?: Race; keyword?: Keyword }
+  | { k: 'cardPlayed'; side: Side; cardType?: CardType; race?: Race; keyword?: Keyword; hasBattlecry?: boolean; hasDeathrattle?: boolean }
   | { k: 'summon'; side: Side; race?: Race }
   | { k: 'minionDied'; side: Side; race?: Race }
   | { k: 'damaged'; subject: 'self' | 'friendlyHero' | 'friendlyMinion' | 'anyMinion' }
@@ -423,6 +428,8 @@ export interface CardDef {
   auras?: Aura[];
   /** 受傷時攻擊力加成（激怒） */
   enrage?: { atk: number };
+  /** 條件成立時的持續攻擊力加成（例如牌庫 25 張以上 +5 攻擊力） */
+  atkIf?: { cond: Condition; amount: number };
   target?: TargetReq;
   chooseOne?: ChooseOneOption[];
   secret?: boolean;
