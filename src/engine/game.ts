@@ -77,6 +77,8 @@ interface Ctx {
   sourceCardId: string;
   /** 已死亡來源的快照（亡語用） */
   sourceSnapshot?: Minion;
+  /** 本次從手牌打出的原始實體（手牌條件用） */
+  sourceHandCard?: HandCard;
   isSpell: boolean;
   isHeroPower?: boolean;
   chosen: number | null;
@@ -980,6 +982,12 @@ export class Game {
     const p = s.players[pid];
     // 回音的複製與暫時的卡只能在本回合使用
     p.hand = p.hand.filter((h) => !h.echo && !h.temporary);
+    for (const h of p.hand) {
+      if (h.grantedPlayEffectsTurn === s.turn) {
+        h.grantedPlayEffects = undefined;
+        h.grantedPlayEffectsTurn = undefined;
+      }
+    }
     this.recombineShatter(p);
     yield* this.emit({ k: 'turnEnd', player: pid });
     // 回合結束時回到手牌的卡（例如屍淇淋）
@@ -1055,7 +1063,8 @@ export class Game {
     if (def.overload) p.overloadOwed += def.overload;
     this.corruptHand(p, corruptibleUids, cost);
 
-    let abilities: Ability[] = def.abilities ?? [];
+    let abilities: Ability[] = [...(def.abilities ?? [])];
+    if (hc.grantedPlayEffects?.length) abilities.push({ on: { k: 'play' }, effects: hc.grantedPlayEffects });
     let transformInto: string | undefined;
     if (def.chooseOne) {
       const opt = def.chooseOne[option ?? 0];
@@ -1069,6 +1078,7 @@ export class Game {
       controller: p.id,
       sourceUid: null,
       sourceCardId: def.id,
+      sourceHandCard: hc,
       isSpell: def.type === 'SPELL',
       chosen: target ?? null,
       it: null,
@@ -1274,6 +1284,9 @@ export class Game {
     if (isHero(attacker)) s.players[pid].heroAttackedThisTurn = true;
 
     this.currentAttack = { attacker: attackerUid, defender: targetUid };
+    if (!isHero(attacker) && this.hasKw(attacker, 'STEALTH')) {
+      for (const h of s.players[pid].hand) if (h.cardId === 'CAP_006') h.stealthAttackSeen = true;
+    }
     const it: ItRef = { kind: 'char', uid: attackerUid };
     if (isHero(defender)) {
       yield* this.checkSecrets(dp, 'heroAttacked', { it });
@@ -1328,6 +1341,7 @@ export class Game {
       return {
         owner: c.owner,
         uid: c.uid,
+        cardId: w?.cardId,
         poisonous: !!w?.keywords.includes('POISONOUS'),
         lifesteal: !!w?.keywords.includes('LIFESTEAL'),
         freeze: !!w?.keywords.includes('FREEZE_ON_DAMAGE'),
@@ -1336,6 +1350,7 @@ export class Game {
     return {
       owner: c.owner,
       uid: c.uid,
+      cardId: c.cardId,
       poisonous: this.hasKw(c, 'POISONOUS'),
       lifesteal: this.hasKw(c, 'LIFESTEAL'),
       freeze: this.hasKw(c, 'FREEZE_ON_DAMAGE'),
@@ -1347,6 +1362,13 @@ export class Game {
   // ==========================================================================
 
   private *damage(src: DmgSource, targetUid: number, amount: number): Gen<number> {
+    const sourceMinion = src.uid !== null ? this.minion(src.uid) : null;
+    if (sourceMinion && this.s.current === src.owner) {
+      const races = getCard(sourceMinion.cardId).races ?? [];
+      if (races.includes('PIRATE') || races.includes('ALL')) {
+        amount += this.s.players[src.owner].board.filter((m) => !m.silenced && !m.dead && m.hp > 0 && m.cardId === 'CAP_104').length;
+      }
+    }
     const t = this.char(targetUid);
     if (!t || amount <= 0 || this.over) return 0;
     let overkill = false;
@@ -1583,8 +1605,14 @@ export class Game {
           continue;
         }
       }
+      const drawnDef = getCard(card.cardId);
+      if (drawnDef.summonedWhenDrawnForOpponent) {
+        yield* this.summon(opp(p.id), card.cardId, undefined, card);
+        if (!pool) i--;
+        continue;
+      }
       // 抽到時施放：施放後再抽一張
-      if (getCard(card.cardId).castsWhenDrawn) {
+      if (drawnDef.castsWhenDrawn) {
         yield* this.castOnDraw(p, card);
         if (!pool) i--;
         continue;
@@ -1701,17 +1729,17 @@ export class Game {
   }
 
   /** 召喚手下（非從手牌打出） */
-  private *summon(owner: PlayerId, cardId: string, position?: number): Gen<Minion | null> {
+  private *summon(owner: PlayerId, cardId: string, position?: number, sourceCard?: HandCard): Gen<Minion | null> {
     const p = this.s.players[owner];
     if (p.board.length >= MAX_BOARD) return null;
-    const m = this.makeMinion(owner, cardId);
+    const m = this.makeMinion(owner, cardId, sourceCard);
     const pos = position === undefined ? p.board.length : Math.max(0, Math.min(position, p.board.length));
     p.board.splice(pos, 0, m);
     this.recalcAuras();
     this.countSummon(p, cardId);
     this.assemble(p, m);
     this.fx({ kind: 'summon', uid: m.uid, cardId, player: owner });
-    yield* this.emit({ k: 'summon', player: owner, subject: m.uid, races: getCard(cardId).races });
+    yield* this.emit({ k: 'summon', player: owner, subject: m.uid, races: getCard(cardId).races, cardId });
     return m;
   }
 
@@ -2098,6 +2126,7 @@ export class Game {
           ev.subject !== holderUid
         );
       case 'summon':
+        return rel(trig.side) && raceOk(trig.race) && (!trig.cardId || trig.cardId === ev.cardId) && ev.subject !== holderUid;
       case 'minionDied':
         return rel(trig.side) && raceOk(trig.race) && ev.subject !== holderUid;
       case 'damaged':
@@ -2116,11 +2145,16 @@ export class Game {
         if (trig.subject === 'friendly') return ev.player === owner;
         if (trig.subject === 'minion') return !ev.isHero;
         return true;
-      case 'attack':
+      case 'attack': {
         if (!!trig.after !== !!ev.after) return false;
+        if (trig.keyword) {
+          const ch = ev.subject !== undefined ? this.char(ev.subject) : null;
+          if (!ch || isHero(ch) || !this.hasKw(ch, trig.keyword)) return false;
+        }
         if (trig.subject === 'self') return ev.subject === holderUid;
         if (trig.subject === 'friendlyHero') return !!ev.isHero && ev.player === owner;
         return !ev.isHero && ev.player === owner;
+      }
     }
     return false;
   }
@@ -3034,6 +3068,14 @@ export class Game {
   // 特殊效果（手動定義的卡牌使用）
   // ==========================================================================
 
+  private putImpInformants(owner: PlayerId, count: number) {
+    const enemy = this.s.players[opp(owner)];
+    for (let i = 0; i < count; i++) {
+      const h = this.newHandCard('CAP_400t2t');
+      enemy.deck.splice(randomInt(this.s, enemy.deck.length + 1), 0, h);
+    }
+  }
+
   private *custom(fn: string, args: Record<string, unknown>, ctx: Ctx): Gen {
     const s = this.s;
     const me = s.players[ctx.controller];
@@ -3166,6 +3208,112 @@ export class Game {
           if (!c) break;
           const hc = this.addToHand(me, c.id);
           if (hc) hc.costMod -= 2;
+        }
+        break;
+      }
+      case 'si7RandomHandDiscount': {
+        const h = pick(s, me.hand);
+        if (h) h.costMod -= Number(args.amount ?? 3);
+        break;
+      }
+      case 'silentStrike': {
+        const target = ctx.chosen !== null ? this.minion(ctx.chosen) : null;
+        if (!target) break;
+        target.atkBuff += 3;
+        if (this.hasKw(target, 'STEALTH')) {
+          const enemies = this.s.players[opp(ctx.controller)].board.filter((m) => this.alive(m));
+          const victim = pick(s, enemies);
+          if (victim) yield* this.damage(this.dmgSource(ctx), victim.uid, this.atkOf(target) + (ctx.isSpell ? this.spellDamage(ctx.controller) : 0));
+        }
+        break;
+      }
+      case 'tricksOfTrade': {
+        if (ctx.chosen === null) break;
+        const amount = ctx.sourceHandCard?.stealthAttackSeen ? 3 : 1;
+        yield* this.damage(this.dmgSource(ctx), ctx.chosen, amount + (ctx.isSpell ? this.spellDamage(ctx.controller) : 0));
+        break;
+      }
+      case 'follow': {
+        const kind = String(args.kind ?? '');
+        const grant = (h: HandCard | null) => {
+          if (!h) return;
+          h.grantedPlayEffects = [{ e: 'custom', fn: 'follow', args: { kind } }];
+          h.grantedPlayEffectsTurn = s.turn;
+        };
+        const choosePlayable = function* (cards: HandCard[], title: string): Gen<HandCard | null> {
+          if (!cards.length) return null;
+          const id = yield* this.choose(ctx, cards.map((h) => h.cardId), title);
+          return cards.find((h) => h.cardId === id) ?? null;
+        }.bind(this);
+        if (kind === 'footsteps') {
+          const opts = this.discoverOptions({ type: 'MINION', keyword: 'STEALTH' }, ctx.controller);
+          if (!opts.length) break;
+          const id = yield* this.choose(ctx, opts, '發現一個潛行手下');
+          grant(this.addToHand(me, id));
+        } else if (kind === 'fuse') {
+          const enemies = this.chars().filter((c) => this.alive(c) && c.owner !== ctx.controller);
+          const victim = pick(s, enemies);
+          if (victim) yield* this.damage(this.dmgSource(ctx), victim.uid, 2 + (ctx.isSpell ? this.spellDamage(ctx.controller) : 0));
+          const cards = me.hand.filter((h) => (getCard(h.cardId).races ?? []).includes('PIRATE') && this.canPlay(h.uid).ok);
+          grant(yield* choosePlayable(cards, '選一張可打出的海盜'));
+        } else if (kind === 'evidence') {
+          this.putImpInformants(ctx.controller, 1);
+          const cards = me.hand.filter((h) => this.canPlay(h.uid).ok);
+          grant(yield* choosePlayable(cards, '選一張可打出的牌'));
+        } else if (kind === 'ghosts') {
+          yield* this.summon(ctx.controller, 'CAP_802t');
+          const cards = me.hand.filter((h) => this.canPlay(h.uid).ok);
+          grant(yield* choosePlayable(cards, '選一張可打出的牌'));
+        }
+        break;
+      }
+      case 'fireThisCannoneer': {
+        const cannon = ctx.sourceUid !== null ? this.minion(ctx.sourceUid) : null;
+        if (!cannon || cannon.cardId !== 'CAP_107t') break;
+        const extra = me.board.filter((m) => !m.silenced && !m.dead && m.hp > 0 && m.cardId === 'CAP_106').length;
+        for (let shot = 0; shot < 1 + extra; shot++) {
+          const enemies = this.chars().filter((c) => this.alive(c) && c.owner !== ctx.controller);
+          const victim = pick(s, enemies);
+          if (!victim) break;
+          yield* this.damage(this.charSource(cannon), victim.uid, 1);
+        }
+        break;
+      }
+      case 'fireCannoneers': {
+        for (const cannon of [...me.board].filter((m) => this.alive(m) && m.cardId === 'CAP_107t')) {
+          const cctx: Ctx = { ...this.baseCtx(ctx.controller), sourceUid: cannon.uid, sourceCardId: cannon.cardId };
+          yield* this.custom('fireThisCannoneer', {}, cctx);
+        }
+        break;
+      }
+      case 'putImpInformants':
+        this.putImpInformants(ctx.controller, Number(args.count ?? 1));
+        break;
+      case 'corruptConstable': {
+        const list = foe.deck.filter((h) => h.cardId === 'CAP_400t2t');
+        const h = pick(s, list);
+        if (h) {
+          foe.deck.splice(foe.deck.indexOf(h), 1);
+          h.atkBuff += 2;
+          h.hpBuff += 2;
+          foe.deck.push(h);
+        }
+        break;
+      }
+      case 'frameJob': {
+        for (let i = 0; i < 2; i++) {
+          const victim = pick(s, foe.board.filter((m) => this.alive(m)));
+          if (victim) victim.dead = true;
+        }
+        const minions = foe.deck.filter((h) => getCard(h.cardId).type === 'MINION');
+        const sample = shuffle(s, [...minions]).slice(0, 3);
+        if (sample.length) {
+          const id = yield* this.choose(ctx, sample.map((h) => h.cardId), '選一個敵方牌庫中的手下置頂');
+          const h = minions.find((x) => x.cardId === id);
+          if (h) {
+            foe.deck.splice(foe.deck.indexOf(h), 1);
+            foe.deck.push(h);
+          }
         }
         break;
       }
