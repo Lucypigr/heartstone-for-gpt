@@ -303,11 +303,11 @@ export type Trig =
   | { k: 'turnStart'; whose: 'mine' | 'opp' | 'each' }
   | { k: 'spellCast'; side: Side; school?: string }
   | { k: 'cardPlayed'; side: Side; cardType?: CardType; race?: Race; keyword?: Keyword; hasBattlecry?: boolean; hasDeathrattle?: boolean }
-  | { k: 'summon'; side: Side; race?: Race }
+  | { k: 'summon'; side: Side; race?: Race; cardId?: string }
   | { k: 'minionDied'; side: Side; race?: Race }
   | { k: 'damaged'; subject: 'self' | 'friendlyHero' | 'friendlyMinion' | 'anyMinion' }
   | { k: 'healed'; subject: 'any' | 'friendly' | 'minion' }
-  | { k: 'attack'; subject: 'self' | 'friendlyHero' | 'friendlyMinion'; after?: boolean }
+  | { k: 'attack'; subject: 'self' | 'friendlyHero' | 'friendlyMinion'; after?: boolean; keyword?: Keyword }
   | { k: 'heroPower'; side: Side }
   | { k: 'draw'; side: Side }
   | { k: 'frenzy' }
@@ -460,6 +460,8 @@ export interface CardDef {
   startOfGameLast?: boolean;
   /** 偽裝／自由放置：這張手下可打到自己或對手的場上 */
   disguised?: boolean;
+  /** 抽到時改為替抽牌者的對手召喚，並補抽一張（Imp-formant） */
+  summonedWhenDrawnForOpponent?: boolean;
   /** 碎裂：進入手牌時分裂成左右兩個官方半片 */
   shatter?: { left: string; right: string };
   /** 碎裂半片：記錄可與哪一張另一半重組回原卡 */
