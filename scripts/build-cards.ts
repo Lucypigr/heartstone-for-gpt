@@ -540,7 +540,10 @@ async function main() {
   console.log('主要不支援原因：');
   for (const [k, n] of [...reasons.entries()].sort((a, b) => b[1] - a[1]).slice(0, 25)) console.log(`  ${n}\t${k}`);
   console.log('紫羅蘭堡待支援：');
-  for (const f of failures.filter((x) => x.set === 1988)) console.log(`  ${f.id}\t${f.name}\t${f.reason}`);
+  for (const f of failures.filter((x) => x.set === 1988)) {
+    const raw = byId.get(f.id);
+    console.log(`  ${f.id}\t${f.name}\t${f.reason}\tTEXT=${normalizeText(raw?.strs.CARDTEXT?.enUS ?? '')}\tREFS=${JSON.stringify(raw?.refs ?? {})}`);
+  }
 }
 
 main().catch((e) => {
