@@ -746,7 +746,7 @@ export class Game {
     const p = this.me;
     if (p.heroPower.used || p.mana < p.heroPower.cost) return false;
     const def = this.powerDef(p);
-    if ((def as HeroPowerDef).passive) return false;
+    if (def.passive) return false;
     if (def.needsBoardSpace && p.board.length >= MAX_BOARD) return false;
     if (!p.heroPower.heroCard && p.heroClass === 'SHAMAN' && BASIC_TOTEMS.every((t) => p.board.some((m) => m.cardId === t))) return false;
     if (def.chooseOne) {
