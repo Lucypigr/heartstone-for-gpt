@@ -36,6 +36,10 @@ export function legalActions(g: Game): Action[] {
       else out.push({ type: 'heroPower', option });
     }
   }
+  if (g.canSecondaryHeroPower()) {
+    if (g.secondaryHeroPowerNeedsTarget()) for (const t of g.secondaryHeroPowerTargets()) out.push({ type: 'secondaryHeroPower', target: t });
+    else out.push({ type: 'secondaryHeroPower' });
+  }
   if (g.canLaunch().ok) out.push({ type: 'launch' });
   for (const c of [p.hero, ...p.board]) {
     if (!g.canAttack(c.uid)) continue;
