@@ -539,6 +539,10 @@ async function main() {
   console.log('各系列支援數：', [...bySet.entries()].sort((a, b) => a[0] - b[0]).map(([s, v]) => `${s}:${v.ok}/${v.total}`).join(' '));
   console.log('主要不支援原因：');
   for (const [k, n] of [...reasons.entries()].sort((a, b) => b[1] - a[1]).slice(0, 25)) console.log(`  ${n}\t${k}`);
+  for (const dbf of [127012, 127024, 127063]) {
+    const x = raws.find((r) => r.dbf === dbf);
+    console.log(`紫羅蘭堡衍生卡 DBF ${dbf}: ${x?.id ?? 'NOT_FOUND'} ${clean(x?.strs.CARDNAME?.enUS) ?? ''} TEXT=${normalizeText(x?.strs.CARDTEXT?.enUS ?? '')}`);
+  }
   console.log('紫羅蘭堡待支援：');
   for (const f of failures.filter((x) => x.set === 1988)) {
     const raw = byId.get(f.id);
