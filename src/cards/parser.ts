@@ -1538,6 +1538,17 @@ export function parseCardText(input: ParseInput, env: ParseEnv): ParsedCard {
     }
     if (!raw) continue;
 
+    // 官方的已腐化衍生卡會以「Corrupted」作為純顯示標記，不是實際效果。
+    // 可能單獨成句，也可能直接接在 Battlecry / 關鍵字前。
+    const corrupted = /^Corrupted(?:[:.]? |$)/.exec(raw);
+    if (corrupted) {
+      raw = raw.slice(corrupted[0].length).trim();
+      if (!raw) {
+        current = null;
+        continue;
+      }
+    }
+
     if (/^Choose One/.test(raw)) fail('Choose One 由子卡處理');
 
     const st = /^Stealth (?:for 1 turn|until your next turn)$/.exec(raw);
