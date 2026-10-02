@@ -81,6 +81,12 @@ export const OVERRIDES: Record<string, Override> = {
   },
   JAIL_202: { auras: [{ scope: 'friendlyHero', atk: 1 }] },
   JAIL_204: { costIf: { cond: { c: 'noMinions' }, cost: 2 } },
+  JAIL_319: { abilities: play(fn('skeletonKey')) },
+  CAP_805: { abilities: play(fn('slimeEm')) },
+  CAP_806: { abilities: play(fn('raithVanGeist')) },
+  JAIL_398: {
+    abilities: dr({ e: 'damage', target: { t: 'all', filter: { type: 'character', side: 'any', excludeSelf: true } }, amount: 3 }),
+  },
   JAIL_303: { abilities: [...play(fn('ancientAugur')), ...dr(fn('ancientAugurDiscard'))] },
   JAIL_307: {
     costIf: { cond: { c: 'deckSize', op: '>=', n: 25 }, cost: 3 },
