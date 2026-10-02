@@ -236,11 +236,14 @@ export class Game {
         heroPowersUsed: 0,
         drawnThisTurn: 0,
         summonedRaces: {},
+        violet: { startingDeck: [...o.decks[id]] },
         ai: o.ai[id],
       };
       shuffle(s, s.players[id].deck);
     }
-    s.first = o.first ?? (nextRandom(s) < 0.5 ? 0 : 1);
+    const aya0 = o.decks[0].includes('JAIL_504');
+    const aya1 = o.decks[1].includes('JAIL_504');
+    s.first = aya0 !== aya1 ? (aya0 ? 1 : 0) : (o.first ?? (nextRandom(s) < 0.5 ? 0 : 1));
     s.current = s.first;
     const second = opp(s.first);
     // 「開局」在起手牌抽取前結算，讓改牌庫 / 初始資源的 Rulebreaker
@@ -422,7 +425,12 @@ export class Game {
       const p = this.s.players[c.owner];
       const weapon = p.weapon && this.s.current === c.owner ? p.weapon.atk : 0;
       const aura = p.board.reduce(
-        (sum, m) => sum + (m.silenced ? 0 : m.auras.filter((a) => a.scope === 'friendlyHero').reduce((x, a) => x + (a.atk ?? 0), 0)),
+        (sum, m) =>
+          sum +
+          (m.silenced || m.dormantTurns
+            ? 0
+            : m.auras.filter((a) => a.scope === 'friendlyHero').reduce((x, a) => x + (a.atk ?? 0), 0)) +
+          (!m.silenced && !m.dormantTurns && m.cardId === 'JAIL_202' ? 1 : 0),
         0,
       );
       return Math.max(0, c.tempAtk + weapon + (this.s.current === c.owner ? aura : 0));
@@ -434,7 +442,7 @@ export class Game {
   }
 
   spellDamage(p: PlayerId): number {
-    return this.s.players[p].board.reduce((sum, m) => sum + (m.silenced ? 0 : m.spellDamage), 0);
+    return this.s.players[p].board.reduce((sum, m) => sum + (m.silenced || m.dormantTurns ? 0 : m.spellDamage), 0);
   }
 
   /** 手牌的卡牌定義（殭屍獸會合成兩個部位） */
@@ -534,6 +542,13 @@ export class Game {
       }
       cost -= def.costRule.amount * n;
     }
+    // 紫羅蘭堡的條件費用與持續費用規則
+    if (hc.cardId === 'JAIL_204' && this.s.players[0].board.length + this.s.players[1].board.length === 0) cost = 2;
+    if (hc.cardId === 'JAIL_307' && p.deck.length >= 25) cost -= 2;
+    if (hc.cardId === 'JAIL_503') cost -= p.hand.filter((h) => h.cardId === 'GAME_005' || /^JAIL_504t[0-9]?$/.test(h.cardId)).length;
+    const captiveTaxes = this.s.players.flatMap((pl) => pl.board).filter((m) => !m.silenced && !m.dormantTurns && m.cardId === 'JAIL_890').length;
+    if (def.type === 'MINION') cost += captiveTaxes * 2;
+    if (p.violet.mugPower && def.type === 'MINION' && p.cardsPlayedThisTurn === 0) cost -= 2;
     if (p.nextCardDiscount && p.id === this.s.current) cost -= p.nextCardDiscount;
     if (def.type === 'SPELL' && p.nextSpellDiscount?.turn === this.s.turn && p.id === this.s.current) cost -= p.nextSpellDiscount.amount;
     if (def.type === 'MINION' && p.minionTax?.turn === this.s.turn) cost += p.minionTax.amount;
@@ -633,7 +648,7 @@ export class Game {
     const ctx = this.baseCtx(player);
     ctx.sourceUid = sourceUid;
     return this.chars()
-      .filter((c) => this.alive(c) && this.pass(c, req.filter, ctx))
+      .filter((c) => this.alive(c) && (isHero(c) || !c.dormantTurns) && this.pass(c, req.filter, ctx))
       .filter((c) => {
         if (isHero(c)) return true;
         if (c.owner !== player && this.hasKw(c, 'STEALTH')) return false;
@@ -712,6 +727,7 @@ export class Game {
     if (s.phase !== 'play' || s.pendingChoice) return false;
     const c = this.char(uid);
     if (!c || c.owner !== s.current || !this.alive(c)) return false;
+    if (!isHero(c) && c.dormantTurns) return false;
     if (c.frozen) return false;
     if (this.atkOf(c) <= 0) return false;
     if (c.attacks >= this.maxAttacks(c)) return false;
@@ -869,7 +885,18 @@ export class Game {
     p.overloadLocked = p.overloadOwed;
     p.mana = Math.max(0, p.maxMana - p.overloadOwed);
     p.overloadOwed = 0;
+    if (p.violet.nethrekTurnsLeft !== undefined) {
+      p.violet.nethrekTurnsLeft--;
+      if (p.violet.nethrekTurnsLeft <= 0) {
+        p.maxMana = 10;
+        p.mana = 10;
+        p.violet.nethrekTurnsLeft = undefined;
+        this.log(pid, 'Chef Neth\'rek 的湯完成了：法力設為 10！');
+      }
+    }
     p.heroPower.used = false;
+    if (p.violet.secondaryHeroPower) p.violet.secondaryHeroPower.used = false;
+    p.violet.friendlyDamageThisTurn = 0;
     p.cardsPlayedThisTurn = 0;
     p.spellsThisTurn = 0;
     p.drawnThisTurn = 0;
@@ -881,6 +908,13 @@ export class Game {
     p.hero.attacks = 0;
     for (const pl of s.players) pl.hero.immune = false;
     for (const m of p.board) {
+      if (m.dormantTurns && m.dormantTurns > 0) {
+        m.dormantTurns--;
+        if (m.dormantTurns <= 0) {
+          m.dormantTurns = undefined;
+          this.log(pid, `${this.name(m.cardId)}甦醒了`);
+        }
+      }
       m.sleeping = false;
       m.attacks = 0;
       m.nextTurnKeywords = [];
@@ -891,6 +925,18 @@ export class Game {
     yield* this.checkSecrets(pid, 'turnStart', {});
     yield* this.processDeaths();
     if (this.over) return;
+    if (p.violet.voidDeck?.length) {
+      for (let i = 0; i < 2 && p.violet.voidDeck.length; i++) {
+        const card = p.violet.voidDeck.pop()!;
+        this.enterHandCard(p, card);
+      }
+    }
+    // Godfrey：手牌有空位時，依序取回先前溢抽的牌
+    while (p.violet.overdrawQueue?.length && p.hand.length < MAX_HAND) {
+      const card = p.violet.overdrawQueue.shift()!;
+      card.costMod -= 1;
+      this.enterHandCard(p, card);
+    }
     // 延遲的效果（例如不祥之兆「2 回合後召喚…」）
     if (p.delayed?.length) {
       const due = p.delayed.filter((d) => --d.turns <= 0);
@@ -912,6 +958,7 @@ export class Game {
     const p = s.players[pid];
     // 回音的複製與暫時的卡只能在本回合使用
     p.hand = p.hand.filter((h) => !h.echo && !h.temporary);
+    for (const h of p.hand) if (h.follow?.expiresTurn === s.turn) h.follow = undefined;
     this.recombineShatter(p);
     yield* this.emit({ k: 'turnEnd', player: pid });
     // 回合結束時回到手牌的卡（例如屍淇淋）
@@ -1105,7 +1152,7 @@ export class Game {
     const hc = p.hand.find((h) => h.uid === handUid);
     if (!hc) return { ok: false, reason: '找不到卡牌' };
     const def = this.handDef(hc);
-    if (!def.prepare) return { ok: false, reason: '這張牌沒有預備' };
+    if (!def.prepare && !hc.prepareGranted) return { ok: false, reason: '這張牌沒有預備' };
     if (hc.prepared) return { ok: false, reason: '這張牌已經預備過' };
     if (p.mana < 1) return { ok: false, reason: '至少需要 1 點剩餘法力才能預備' };
     if (this.costOf(p, hc) <= 0) return { ok: false, reason: '這張牌已經是 0 費' };
@@ -1795,8 +1842,13 @@ export class Game {
       let atk = 0;
       let hp = 0;
       const kws: Keyword[] = [];
+      if (m.dormantTurns) {
+        m.auraAtk = 0;
+        m.auraKeywords = [];
+        continue;
+      }
       for (const src of all) {
-        if (src.silenced || !src.auras.length) continue;
+        if (src.silenced || src.dormantTurns || !src.auras.length) continue;
         for (const aura of src.auras) {
           let applies = false;
           const races = getCard(m.cardId).races ?? [];
@@ -1924,7 +1976,7 @@ export class Game {
         let ent: Minion | Weapon | null;
         if (h.kind === 'minion') {
           const m = this.minion(h.uid);
-          if (!m || m.hp <= 0 || m.dead) continue;
+          if (!m || m.hp <= 0 || m.dead || m.dormantTurns) continue;
           ent = m;
           abilities = m.abilities;
         } else {
