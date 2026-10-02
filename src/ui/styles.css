@@ -926,13 +926,30 @@ textarea {
   cursor: copy;
 }
 
-.ghost-minion {
-  position: absolute;
-  bottom: 2px;
-  right: 10px;
-  font-size: 0.75em;
-  color: #2a1d10;
-  opacity: 0.8;
+.battle.placing-card {
+  touch-action: none;
+}
+
+.placement-card-ghost {
+  position: fixed;
+  left: -9999px;
+  top: -9999px;
+  z-index: 66;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, -66%) rotate(-3deg) scale(0.92);
+  transform-origin: center bottom;
+  filter: drop-shadow(0 14px 18px #000a);
+  transition: opacity 0.08s ease;
+  will-change: left, top, transform, opacity;
+}
+
+.placement-card-ghost.visible {
+  opacity: 0.58;
+}
+
+.placement-card-ghost .card {
+  pointer-events: none;
 }
 
 /* 手下 */
