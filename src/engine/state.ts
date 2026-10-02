@@ -38,6 +38,8 @@ export interface HandCard {
   shatterCombined?: boolean;
   /** Noxious Bribe：這張二選一卡牌的兩個效果會同時生效 */
   chooseOneCombined?: boolean;
+  /** Breakout Architect：這張法術打出時效果會施放兩次 */
+  castTwice?: boolean;
 }
 
 export interface Minion {
