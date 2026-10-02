@@ -1,0 +1,44 @@
+name: Verify Violet Hold
+
+on:
+  push:
+    branches: [feature/violet-hold-completion]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Rebuild official card data
+        run: |
+          set -o pipefail
+          npm run cards 2>&1 | tee card-build.log
+          node - <<'NODE'
+          const fs = require('fs');
+          const data = JSON.parse(fs.readFileSync('src/data/cards.json', 'utf8'));
+          const cards = data.cards.filter((c) => c.collectible && c.set === 1988);
+          console.log('VIOLET_HOLD_SUPPORTED=' + cards.length);
+          console.log('VIOLET_HOLD_IDS=' + cards.map((c) => c.id).join(','));
+          NODE
+          grep $'\t1988\t' .cache/unsupported.txt > violet-hold-unsupported.txt || true
+          echo "VIOLET_HOLD_UNSUPPORTED=$(wc -l < violet-hold-unsupported.txt)"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: violet-hold-card-diagnostics
+          path: |
+            card-build.log
+            violet-hold-unsupported.txt
+            .cache/unsupported.txt
+            src/data/cards.json
+      - run: npm test
+      - run: npm run build
