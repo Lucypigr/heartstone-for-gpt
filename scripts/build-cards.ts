@@ -532,7 +532,12 @@ async function main() {
   mkdirSync('.cache', { recursive: true });
   writeFileSync(
     '.cache/unsupported.txt',
-    failures.map((f) => `${f.id}\t${f.set}\t${f.name}\t${f.reason}`).join('\n'),
+    failures
+      .map((f) => {
+        const text = normalizeText(byId.get(f.id)?.strs.CARDTEXT?.enUS ?? '').replace(/[\t\n]+/g, ' ');
+        return `${f.id}\t${f.set}\t${f.name}\t${text}\t${f.reason}`;
+      })
+      .join('\n'),
   );
   console.log(`可收藏卡（去重後）：${groupsTotal}，已支援：${cards.length}，衍生卡：${tokens.length}`);
   console.log('各系列支援數：', [...bySet.entries()].sort((a, b) => a[0] - b[0]).map(([s, v]) => `${s}:${v.ok}/${v.total}`).join(' '));
