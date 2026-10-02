@@ -175,6 +175,62 @@ describe('2026：賄賂（Bribe）', () => {
   });
 });
 
+describe('2026：紫羅蘭堡批次復原（一）', () => {
+  it('孤獨囚犯在雙方場上都沒有手下時消耗為 2', () => {
+    const g = newGame();
+    const p = g.s.players[0];
+    p.board = [];
+    g.s.players[1].board = [];
+    const h = g.newHandCard('JAIL_204');
+    p.hand = [h];
+    expect(g.costOf(p, h)).toBe(2);
+    put(g, 'CS2_182', 1);
+    expect(g.costOf(p, h)).toBe(5);
+  });
+
+  it('群眾控制會對所有手下造成兩次 2 點傷害', () => {
+    const g = newGame();
+    const a = put(g, 'CS2_182', 0);
+    const b = put(g, 'CS2_182', 1);
+    play(g, 'JAIL_307');
+    expect(g.minion(a.uid)?.hp).toBe(1);
+    expect(g.minion(b.uid)?.hp).toBe(1);
+  });
+
+  it('Breakout Architect 發現的法術會施放兩次', () => {
+    const g = newGame();
+    const p = g.s.players[0];
+    const uid = give(g, 'JAIL_123');
+    expect(g.apply({ type: 'play', handUid: uid, position: 0 })).toBe(true);
+    expect(g.s.pendingChoice).not.toBeNull();
+    g.apply({ type: 'choose', index: 0 });
+    expect(p.hand.some((h) => h.castTwice)).toBe(true);
+  });
+
+  it('Code Violet 在本回合已施放 3 張其他法術時召喚兩個 8 費手下', () => {
+    const g = newGame();
+    const p = g.s.players[0];
+    p.board = [];
+    p.spellsThisTurn = 3;
+    const uid = give(g, 'JAIL_735');
+    expect(g.apply({ type: 'play', handUid: uid })).toBe(true);
+    expect(p.board).toHaveLength(2);
+    expect(p.board.every((m) => getCard(m.cardId).cost === 8)).toBe(true);
+  });
+
+  it('血色招募者從牌庫拉兩個 2 費以下手下並賦予突襲', () => {
+    const g = newGame();
+    const p = g.s.players[0];
+    p.board = [];
+    p.deck = [g.newHandCard('CS2_182'), g.newHandCard('CS2_231'), g.newHandCard('CS2_101t'), g.newHandCard('CS2_101t')];
+    const uid = give(g, 'JAIL_516');
+    expect(g.apply({ type: 'play', handUid: uid, position: 0 })).toBe(true);
+    const recruits = p.board.filter((m) => m.cardId === 'CS2_101t');
+    expect(recruits).toHaveLength(2);
+    expect(recruits.every((m) => m.keywords.includes('RUSH'))).toBe(true);
+  });
+});
+
 describe('2026：伊莉妲‧逐罪者（Void draw rule）', () => {
   it('戰吼把牌庫送入虛無但保留 1 張；下個自己的回合額外從虛無取得 2 張，仍正常抽牌', () => {
     const g = newGame();
