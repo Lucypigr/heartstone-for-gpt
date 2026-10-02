@@ -17,6 +17,7 @@ import {
   STARTING_GOLD,
   STARTING_PACKS,
   WIN_REWARD,
+  YIHO_REWARD_GOLD,
 } from './economy';
 import { packById, type PackType } from './sets';
 
@@ -108,6 +109,23 @@ export function sanitizeProfile(raw: unknown): Profile {
     history: (p.history ?? []).slice(-30),
     settings: { ...base.settings, ...(p.settings ?? {}) },
     ladder: p.ladder ? sanitizeLadder(p.ladder) : undefined,
+  };
+}
+
+
+// ---------------------------------------------------------------------------
+// 獎勵碼
+// ---------------------------------------------------------------------------
+
+export function redeemRewardCode(
+  p: Profile,
+  code: string,
+): { ok: boolean; profile: Profile; reward: number; error?: string } {
+  if (code.trim() !== 'Yiho') return { ok: false, profile: p, reward: 0, error: '獎勵碼無效' };
+  return {
+    ok: true,
+    reward: YIHO_REWARD_GOLD,
+    profile: { ...p, gold: p.gold + YIHO_REWARD_GOLD },
   };
 }
 

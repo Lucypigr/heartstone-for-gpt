@@ -10,6 +10,9 @@ export const LOSS_REWARD: Record<Difficulty, number> = { easy: 5, normal: 10, ha
 /** 每日首勝額外獎勵 */
 export const DAILY_FIRST_WIN_BONUS = 50;
 
+/** 獎勵碼 Yiho：每次兌換獲得 50,000 金幣，可重複兌換 */
+export const YIHO_REWARD_GOLD = 50_000;
+
 export const DIFFICULTY_NAMES: Record<Difficulty, string> = { easy: '簡單', normal: '普通', hard: '困難' };
 
 export const CARDS_PER_PACK = 5;
