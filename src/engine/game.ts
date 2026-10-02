@@ -277,7 +277,7 @@ export class Game {
     this.steps = 0;
     switch (action.type) {
       case 'play':
-        this.drive(this.wrap(this.playCard(action.handUid, action.target, action.position, action.option)));
+        this.drive(this.wrap(this.playCard(action.handUid, action.target, action.position, action.option, action.side)));
         return true;
       case 'attack':
         this.drive(this.wrap(this.doAttack(action.attacker, action.target)));
@@ -312,7 +312,7 @@ export class Game {
       case 'endTurn':
         return { ok: true };
       case 'play': {
-        const r = this.canPlay(action.handUid, action.option);
+        const r = this.canPlay(action.handUid, action.option, action.side);
         if (!r.ok) return r;
         const req = this.playTargetReq(action.handUid, action.option);
         if (req) {
@@ -558,7 +558,7 @@ export class Game {
     return !!hc && this.handDef(hc.card).type === 'SPELL';
   }
 
-  canPlay(handUid: number, option?: number): { ok: boolean; reason?: string } {
+  canPlay(handUid: number, option?: number, side?: 'self' | 'opponent'): { ok: boolean; reason?: string } {
     const s = this.s;
     const p = s.players[s.current];
     const hc = p.hand.find((h) => h.uid === handUid);
@@ -569,7 +569,15 @@ export class Game {
       const kind = this.costKind(p, hc);
       return { ok: false, reason: kind === 'health' ? '生命值不足' : kind === 'corpses' ? '屍體不足' : '法力不足' };
     }
-    if (def.type === 'MINION' && p.board.length >= MAX_BOARD) return { ok: false, reason: '場上已滿' };
+    if (def.type === 'MINION') {
+      if (side === 'opponent' && !def.disguised) return { ok: false, reason: '這張手下不能打到對手場上' };
+      if (def.disguised && side === undefined) {
+        if (p.board.length >= MAX_BOARD && s.players[opp(p.id)].board.length >= MAX_BOARD) return { ok: false, reason: '雙方場上都已滿' };
+      } else {
+        const boardOwner = side === 'opponent' ? opp(p.id) : p.id;
+        if (s.players[boardOwner].board.length >= MAX_BOARD) return { ok: false, reason: side === 'opponent' ? '對手場上已滿' : '場上已滿' };
+      }
+    }
     if (def.secret) {
       if (p.secrets.some((x) => x.cardId === def.id)) return { ok: false, reason: '已有相同的奧秘' };
       if (p.secrets.length >= MAX_SECRETS) return { ok: false, reason: '奧秘已滿' };
@@ -910,7 +918,13 @@ export class Game {
   // 出牌
   // ==========================================================================
 
-  private *playCard(handUid: number, target: number | undefined, position: number | undefined, option: number | undefined): Gen {
+  private *playCard(
+    handUid: number,
+    target: number | undefined,
+    position: number | undefined,
+    option: number | undefined,
+    side: 'self' | 'opponent' | undefined,
+  ): Gen {
     const s = this.s;
     const p = s.players[s.current];
     const idx = p.hand.findIndex((h) => h.uid === handUid);
@@ -971,21 +985,26 @@ export class Game {
     const playAbilities = abilities.filter((a) => a.on.k === 'play');
 
     if (def.type === 'MINION') {
-      const m = this.makeMinion(p.id, transformInto ?? def.id, hc);
-      const pos = Math.max(0, Math.min(position ?? p.board.length, p.board.length));
-      p.board.splice(pos, 0, m);
+      const boardOwner = def.disguised && side === 'opponent' ? opp(p.id) : p.id;
+      const boardPlayer = s.players[boardOwner];
+      const m = this.makeMinion(boardOwner, transformInto ?? def.id, hc);
+      const pos = Math.max(0, Math.min(position ?? boardPlayer.board.length, boardPlayer.board.length));
+      boardPlayer.board.splice(pos, 0, m);
       ctx.sourceUid = m.uid;
+      // 偽裝手下進場後，其卡面中的「友方／敵方」依目前控制者判定。
+      // 但 cardPlayed 仍由真正出牌的玩家 p.id 發出，符合官方自由放置規則。
+      ctx.controller = boardOwner;
       this.recalcAuras();
-      this.countSummon(p, m.cardId);
-      this.assemble(p, m);
-      this.fx({ kind: 'summon', uid: m.uid, cardId: m.cardId, player: p.id, played: true });
-      if (def.races?.includes('ELEMENTAL')) p.elementalThisTurn = true;
+      this.countSummon(boardPlayer, m.cardId);
+      this.assemble(boardPlayer, m);
+      this.fx({ kind: 'summon', uid: m.uid, cardId: m.cardId, player: boardOwner, played: true });
+      if (def.races?.includes('ELEMENTAL')) boardPlayer.elementalThisTurn = true;
       for (const ab of playAbilities) {
         if (ab.cond && !this.evalCond(ab.cond, ctx)) continue;
         yield* this.runEffects(ab.effects, ctx);
         if (this.over) return;
       }
-      yield* this.emit({ k: 'summon', player: p.id, subject: m.uid, races: def.races });
+      yield* this.emit({ k: 'summon', player: boardOwner, subject: m.uid, races: def.races });
       yield* this.emit({ k: 'cardPlayed', player: p.id, subject: m.uid, cardType: 'MINION', races: def.races, cardId: def.id, echo });
       if (this.minion(m.uid)) yield* this.checkSecrets(opp(p.id), 'enemyPlaysMinion', { it: { kind: 'char', uid: m.uid } });
     } else if (def.type === 'SPELL') {
