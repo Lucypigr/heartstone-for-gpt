@@ -1,11 +1,14 @@
 import { useState } from 'react';
 import { COLLECTIBLE, DATA_BUILD } from '../../cards/registry';
+import { redeemRewardCode } from '../../game/profile';
 import { exportProfile, importProfile, resetProfile, setProfile, useProfile } from '../store';
 
 export function Settings() {
   const p = useProfile();
   const [text, setText] = useState('');
   const [msg, setMsg] = useState('');
+  const [rewardCode, setRewardCode] = useState('');
+  const [rewardMsg, setRewardMsg] = useState('');
 
   const download = () => {
     const blob = new Blob([exportProfile()], { type: 'application/json' });
@@ -28,6 +31,39 @@ export function Settings() {
             </button>
           ))}
         </div>
+      </div>
+      <div className="panel">
+        <h3>🎁 獎勵碼</h3>
+        <p className="muted small">輸入獎勵碼兌換金幣。可重複兌換有效獎勵碼。</p>
+        <form
+          className="reward-code-row"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const r = redeemRewardCode(p, rewardCode);
+            if (!r.ok) {
+              setRewardMsg(r.error ?? '兌換失敗');
+              return;
+            }
+            setProfile(r.profile);
+            setRewardMsg(`兌換成功！獲得 🪙 ${r.reward.toLocaleString()} 金幣`);
+            setRewardCode('');
+          }}
+        >
+          <label className="sr-only" htmlFor="reward-code-input">
+            獎勵碼
+          </label>
+          <input
+            id="reward-code-input"
+            value={rewardCode}
+            onChange={(e) => setRewardCode(e.target.value)}
+            placeholder="輸入獎勵碼"
+            autoComplete="off"
+          />
+          <button className="btn primary" type="submit" disabled={!rewardCode.trim()}>
+            兌換
+          </button>
+        </form>
+        {rewardMsg && <p className="message">{rewardMsg}</p>}
       </div>
       <div className="panel">
         <h3>存檔</h3>
