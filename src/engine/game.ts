@@ -3271,11 +3271,12 @@ export class Game {
           h.grantedPlayEffects = [{ e: 'custom', fn: 'follow', args: { kind } }];
           h.grantedPlayEffectsTurn = s.turn;
         };
+        const self = this;
         const choosePlayable = function* (cards: HandCard[], title: string): Gen<HandCard | null> {
           if (!cards.length) return null;
-          const id = yield* this.choose(ctx, cards.map((h) => h.cardId), title);
+          const id = yield* self.choose(ctx, cards.map((h) => h.cardId), title);
           return cards.find((h) => h.cardId === id) ?? null;
-        }.bind(this);
+        };
         if (kind === 'footsteps') {
           const opts = this.discoverOptions({ type: 'MINION', keyword: 'STEALTH' }, ctx.controller);
           if (!opts.length) break;
@@ -3538,7 +3539,6 @@ export class Game {
         if (src && it) {
           src.atkBuff += this.atkOf(it);
           const hp = it.maxHp;
-          src.hpBuff += hp;
           src.maxHp += hp;
           src.hp += hp;
         }
