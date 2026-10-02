@@ -217,6 +217,8 @@ export interface PlayerState {
   plaguesShuffled?: number;
   fatigue: number;
   cardsPlayedThisTurn: number;
+  /** Slice and Dice：本回合由這位玩家正常打出的卡（不含重播本身） */
+  playedCardsThisTurn?: { cardId: string; option?: number; side?: 'self' | 'opponent' }[];
   spellsCastThisGame: number;
   heroAttackedThisTurn: boolean;
   /** 本場英雄總攻擊次數（Infest the Scullery）。 */
