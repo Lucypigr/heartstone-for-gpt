@@ -1043,3 +1043,23 @@ describe('死亡騎士：第二批機制', () => {
     expect(g.s.pendingChoice?.options.length).toBeGreaterThan(0);
   });
 });
+
+
+describe('榮譽擊殺', () => {
+  it('己方回合恰好致死會觸發，超額傷害不會', () => {
+    const exact = newGame();
+    const privateMinion = put(exact, 'AV_121', 0);
+    const wisp = put(exact, 'CS2_231', 1);
+    expect(exact.atkOf(privateMinion)).toBe(1);
+    expect(exact.apply({ type: 'attack', attacker: privateMinion.uid, target: wisp.uid })).toBe(true);
+    expect(exact.atkOf(privateMinion)).toBe(3);
+
+    const over = newGame();
+    const buffedPrivate = put(over, 'AV_121', 0);
+    play(over, 'CS2_092', buffedPrivate.uid);
+    const weakTarget = put(over, 'CS2_231', 1);
+    expect(over.atkOf(buffedPrivate)).toBe(5);
+    expect(over.apply({ type: 'attack', attacker: buffedPrivate.uid, target: weakTarget.uid })).toBe(true);
+    expect(over.atkOf(buffedPrivate)).toBe(5);
+  });
+});
