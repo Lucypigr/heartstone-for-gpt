@@ -1134,7 +1134,7 @@ export class Game {
     const watcher = s.players[opp(p.id)];
     if (watcher.holmesWatches?.length) {
       const matches = watcher.holmesWatches.filter((w) => w.turn === s.turn && w.cardName === def.nameEn);
-      for (const w of matches) {
+      for (let hit = 0; hit < matches.length; hit++) {
         for (let i = 0; i < 3; i++) this.addToHand(watcher, 'GAME_005');
         this.log(watcher.id, `${watcher.name}的調查命中：${def.name}`);
       }
