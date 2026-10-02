@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { getCard, hasCard, HEROES } from '../../cards/registry';
 import { AiBrain, aiMulligan, chooseAction, EMOTE_NAMES, EMOTE_TEXT, type Emote } from '../../engine/ai';
-import { Game, isHero } from '../../engine/game';
+import { Game } from '../../engine/game';
 import { CLASS_NAMES } from '../../engine/heroes';
 import type { Action, Hero, Minion, PlayerId, PlayerState } from '../../engine/state';
 import type { CardDef } from '../../engine/types';
@@ -26,6 +26,7 @@ type Mode =
   | { k: 'powerChoose' };
 
 const AI_DELAY = { slow: 1300, normal: 800, fast: 350 };
+const LONG_PRESS_MS = 450;
 
 const ME: PlayerId = 0;
 const AI: PlayerId = 1;
@@ -58,7 +59,7 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
   const [version, setVersion] = useState(0);
   const refresh = useCallback(() => setVersion((v) => v + 1), []);
   const [mode, setMode] = useState<Mode>({ k: 'idle' });
-  const [inspect, setInspect] = useState<{ cardId: string; atk?: number; hp?: number; uid?: number; def?: CardDef } | { power: PlayerId } | null>(null);
+  const [inspect, setInspect] = useState<{ cardId: string; atk?: number; hp?: number; cost?: number; spellDamage?: number; uid?: number; def?: CardDef } | { power: PlayerId } | null>(null);
   const [banner, setBanner] = useState<{ id: number; cardId?: string; text: string } | null>(null);
   const [mulliganPick, setMulliganPick] = useState<Set<number>>(new Set());
   const [reward, setReward] = useState<{ gold: number; daily: number; result: 'win' | 'loss' | 'draw'; change?: LadderChange } | null>(null);
@@ -307,10 +308,7 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
   const onHandClick = (handUid: number) => {
     const hc = me.hand.find((h) => h.uid === handUid)!;
     const def = g.handDef(hc);
-    if (!myTurn) {
-      setInspect({ cardId: hc.cardId, def: hc.parts ? def : undefined });
-      return;
-    }
+    if (!myTurn) return;
     if (mode.k === 'card' && mode.handUid === handUid && mode.stage === 'select') {
       act({ type: 'play', handUid });
       return;
@@ -318,7 +316,6 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
     const can = g.canPlay(handUid);
     if (!can.ok) {
       flash(can.reason ?? '無法打出');
-      setInspect({ cardId: hc.cardId });
       return;
     }
     setInspect(null);
@@ -355,7 +352,6 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
       setMode({ k: 'idle' });
       return;
     }
-    if (!isHero(c)) setInspect({ cardId: c.cardId, atk: g.atkOf(c), hp: c.hp, uid: c.uid, def: c.parts || c.starship ? g.minionDef(c) : undefined });
   };
 
   const onHeroPower = () => {
@@ -403,11 +399,11 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
     if (s.phase === 'mulligan') return '';
     if (!myTurn) return s.pendingChoice ? '' : `${foe.name}的回合…`;
     if (mode.k === 'card') {
-      if (mode.stage === 'place') return '點選位置放置手下（Esc 取消）';
-      if (mode.stage === 'target') return '選擇目標（Esc 取消）';
-      if (mode.stage === 'select') return '再點一次卡牌或點戰場使用';
+      if (mode.stage === 'place') return '點選位置放置手下；點其他地方取消';
+      if (mode.stage === 'target') return '選擇目標；點其他地方取消';
+      if (mode.stage === 'select') return '再點一次卡牌使用；點其他地方取消';
     }
-    if (mode.k === 'attack') return '選擇攻擊目標（Esc 取消）';
+    if (mode.k === 'attack') return '選擇攻擊目標；點其他地方取消';
     if (mode.k === 'heroPower') return '選擇英雄能力的目標';
     return '';
   })();
@@ -427,7 +423,10 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
       g={g}
       className={charClasses(m)}
       onClick={() => onCharClick(m)}
-      onHover={(on) => setInspect(on ? { cardId: m.cardId, atk: g.atkOf(m), hp: m.hp, uid: m.uid, def: m.parts || m.starship ? g.minionDef(m) : undefined } : null)}
+      onLongPress={() => {
+        setMode({ k: 'idle' });
+        setInspect({ cardId: m.cardId, atk: g.atkOf(m), hp: m.hp, uid: m.uid, def: m.parts || m.starship ? g.minionDef(m) : undefined });
+      }}
     />
   );
 
@@ -436,6 +435,10 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
       ref={battleRef}
       className={`battle ${myTurn ? 'my-turn' : ''}`}
       style={{ '--mw': `${mw}px`, '--hw': `${hw}px`, '--cw': `${cw}px` } as CSSProperties}
+      onClick={() => {
+        if (mode.k !== 'idle') setMode({ k: 'idle' });
+        if (inspect) setInspect(null);
+      }}
       onContextMenu={(e) => {
         e.preventDefault();
         setMode({ k: 'idle' });
@@ -504,7 +507,7 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
         </div>
       </div>
 
-      <div className="boards" onClick={() => mode.k === 'card' && mode.stage === 'select' && act({ type: 'play', handUid: mode.handUid })}>
+      <div className="boards">
         <div className="board foe-board">{foe.board.map(renderMinion)}</div>
         <div className="board-divider">
           <span className="hint">{hint}</span>
@@ -583,12 +586,25 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
             const playable = myTurn && g.canPlay(h.uid).ok;
             const echo = g.hasEcho(ME, h);
             return (
-              <div
+              <PressableCardSurface
                 key={h.uid}
-                data-hand-uid={h.uid}
+                handUid={h.uid}
                 className={`hand-slot ${selectedHand === h.uid ? 'selected' : ''} ${h.echo ? 'echo-copy' : ''}`}
                 style={{ '--i': i } as CSSProperties}
                 title={h.echo ? '回音的複製：只能在本回合使用' : undefined}
+                onClick={() => onHandClick(h.uid)}
+                onLongPress={() => {
+                  const stats = def.type === 'MINION' ? g.handStats(ME, h) : undefined;
+                  setMode({ k: 'idle' });
+                  setInspect({
+                    cardId: h.cardId,
+                    def: h.parts ? def : undefined,
+                    atk: stats?.atk,
+                    hp: stats?.hp,
+                    cost: g.costOf(me, h),
+                    spellDamage: g.spellDamage(ME),
+                  });
+                }}
               >
                 <CardView
                   cardId={h.cardId}
@@ -600,7 +616,6 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
                   spellDamage={g.spellDamage(ME)}
                   playable={playable}
                   selected={selectedHand === h.uid}
-                  onClick={() => onHandClick(h.uid)}
                 />
                 {echo && <span className="echo-badge">回音</span>}
                 {g.costKind(me, h) !== 'mana' && (
@@ -608,7 +623,7 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
                     {g.costKind(me, h) === 'health' ? '❤' : '💀'}
                   </span>
                 )}
-              </div>
+              </PressableCardSurface>
             );
           })}
         </div>
@@ -626,7 +641,7 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
       )}
       {inspect && 'cardId' in inspect && hasCard(inspect.cardId) && (
         <div className="inspect" onClick={() => setInspect(null)}>
-          <CardView cardId={inspect.cardId} def={inspect.def} width={220} attack={inspect.atk} health={inspect.hp} />
+          <CardView cardId={inspect.cardId} def={inspect.def} width={220} cost={inspect.cost} attack={inspect.atk} health={inspect.hp} spellDamage={inspect.spellDamage} />
           <Glossary cardId={inspect.cardId} minion={inspect.uid !== undefined ? g.minion(inspect.uid) : null} g={g} />
         </div>
       )}
@@ -797,6 +812,77 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
 // 子元件
 // ============================================================================
 
+function useLongPress(onLongPress: () => void) {
+  const timer = useRef<number | null>(null);
+  const fired = useRef(false);
+
+  const clear = () => {
+    if (timer.current !== null) {
+      window.clearTimeout(timer.current);
+      timer.current = null;
+    }
+  };
+
+  const start = () => {
+    clear();
+    fired.current = false;
+    timer.current = window.setTimeout(() => {
+      timer.current = null;
+      fired.current = true;
+      onLongPress();
+    }, LONG_PRESS_MS);
+  };
+
+  useEffect(() => clear, []);
+
+  const consumeClick = () => {
+    if (!fired.current) return false;
+    fired.current = false;
+    return true;
+  };
+
+  return { start, clear, consumeClick };
+}
+
+function PressableCardSurface({
+  handUid,
+  className,
+  style,
+  title,
+  onClick,
+  onLongPress,
+  children,
+}: {
+  handUid: number;
+  className: string;
+  style?: CSSProperties;
+  title?: string;
+  onClick: () => void;
+  onLongPress: () => void;
+  children: ReactNode;
+}) {
+  const press = useLongPress(onLongPress);
+  return (
+    <div
+      data-hand-uid={handUid}
+      className={className}
+      style={style}
+      title={title}
+      onPointerDown={press.start}
+      onPointerUp={press.clear}
+      onPointerCancel={press.clear}
+      onPointerLeave={press.clear}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (press.consumeClick()) return;
+        onClick();
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 function RankChangeView({ change }: { change: LadderChange }) {
   const { before, after } = change;
   const legendDelta = before.legend && after.legend ? before.legend - after.legend : 0;
@@ -896,16 +982,17 @@ function MinionView({
   g,
   className,
   onClick,
-  onHover,
+  onLongPress,
   children,
 }: {
   m: Minion;
   g: Game;
   className: string;
   onClick: () => void;
-  onHover: (on: boolean) => void;
+  onLongPress: () => void;
   children?: ReactNode;
 }) {
+  const press = useLongPress(onLongPress);
   const def = g.minionDef(m);
   const atk = g.atkOf(m);
   const kw = (k: Parameters<Game['hasKw']>[1]) => g.hasKw(m, k);
@@ -917,12 +1004,15 @@ function MinionView({
     <div
       data-uid={m.uid}
       className={`minion ${kw('TAUNT') ? 'taunt' : ''} ${kw('DIVINE_SHIELD') ? 'shield' : ''} ${kw('STEALTH') ? 'stealth' : ''} ${m.frozen ? 'frozen' : ''} ${def.rarity === 'LEGENDARY' ? 'legendary' : ''} ${className}`}
+      onPointerDown={press.start}
+      onPointerUp={press.clear}
+      onPointerCancel={press.clear}
+      onPointerLeave={press.clear}
       onClick={(e) => {
         e.stopPropagation();
+        if (press.consumeClick()) return;
         onClick();
       }}
-      onMouseEnter={() => onHover(true)}
-      onMouseLeave={() => onHover(false)}
     >
       <div className="minion-portrait">
         <Art cardId={m.cardId} />
