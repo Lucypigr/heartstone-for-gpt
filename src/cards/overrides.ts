@@ -71,6 +71,10 @@ export const OVERRIDES: Record<string, Override> = {
   JAIL_035: {
     abilities: [{ on: { k: 'play' }, cond: { c: 'deckNoNeutral' }, effects: [{ e: 'summonCopy', target: { t: 'self' }, count: 2 }] }],
   },
+  JAIL_101: { target: enemyMinion, abilities: play(fn('violetPunisher')) },
+  JAIL_327: { abilities: play(fn('reinforcementAura')) },
+  JAIL_330: { keywords: ['DIVINE_SHIELD', 'TAUNT'], extraStatsOnBuff: 1 },
+  JAIL_501: { target: anyChar, manaMirrorInHand: true, abilities: play(fn('picklockDamage')) },
   JAIL_118: { abilities: play(fn('destroyNonClassMinions', { class: 'PALADIN' })) },
   JAIL_123: {
     abilities: play({ e: 'discover', pool: { type: 'SPELL', minCost: 5 }, then: [fn('markItCastTwice')] }),
