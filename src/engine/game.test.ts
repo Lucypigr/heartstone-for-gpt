@@ -1769,3 +1769,67 @@ describe('2026：紫羅蘭堡批次復原（四）', () => {
     expect(p.hand.some((h) => h.cardId === 'JAIL_436t2')).toBe(true);
   });
 });
+
+
+describe('2026：紫羅蘭堡批次復原（五）', () => {
+  it('Infest the Scullery 以 2 費為底，每次英雄攻擊提高召喚費用', () => {
+    const g = newGame();
+    const p = g.s.players[0];
+    p.board = [];
+    p.heroAttacksThisGame = 2;
+    play(g, 'JAIL_200');
+    expect(p.board).toHaveLength(2);
+    expect(p.board.every((m) => getCard(m.cardId).cost === 4)).toBe(true);
+  });
+
+  it('Rat Burglar 在回合結束偷走本回合進入對手手牌的所有卡', () => {
+    const g = newGame();
+    const p = g.s.players[0];
+    const foe = g.s.players[1];
+    put(g, 'JAIL_205', 0);
+    const stolen = g.newHandCard('CS2_182');
+    stolen.enteredTurn = g.s.turn;
+    foe.hand.push(stolen);
+    const mine = p.hand.length;
+    g.apply({ type: 'endTurn' });
+    expect(p.hand.length).toBe(mine + 1);
+    expect(p.hand.some((h) => h.uid === stolen.uid)).toBe(true);
+    expect(foe.hand.some((h) => h.uid === stolen.uid)).toBe(false);
+  });
+
+  it('Priest 套件會記住持有期間打出過對手卡牌的複製', () => {
+    const g = newGame();
+    const p = g.s.players[0];
+    const unshackleUid = give(g, 'JAIL_433');
+    const copiedUid = give(g, 'CS2_182');
+    const copied = p.hand.find((h) => h.uid === copiedUid)!;
+    copied.copiedFromOpponent = true;
+    p.mana = 10;
+    expect(g.apply({ type: 'play', handUid: copiedUid })).toBe(true);
+    const unshackle = p.hand.find((h) => h.uid === unshackleUid)!;
+    expect(unshackle.opponentCopyPlayedSeen).toBe(true);
+    expect(g.costOf(p, unshackle)).toBe(1);
+  });
+
+  it('The Living Plague 對英雄的傷害改為洗入等量 Blight', () => {
+    const g = newGame();
+    const plague = put(g, 'JAIL_443', 0);
+    plague.sleeping = false;
+    const foe = g.s.players[1];
+    const hp = foe.hero.hp;
+    const deck = foe.deck.length;
+    expect(g.apply({ type: 'attack', attacker: plague.uid, target: foe.hero.uid })).toBe(true);
+    expect(foe.hero.hp).toBe(hp);
+    expect(foe.deck.length).toBe(deck + g.atkOf(plague));
+    expect(foe.deck.filter((h) => h.cardId === 'JAIL_443t')).toHaveLength(g.atkOf(plague));
+  });
+
+  it('Captive Nathrezim 在場時雙方手下都多 2 費', () => {
+    const g = newGame();
+    put(g, 'JAIL_890', 0);
+    const p = g.s.players[0];
+    const uid = give(g, 'CS2_182');
+    const hc = p.hand.find((h) => h.uid === uid)!;
+    expect(g.costOf(p, hc)).toBe(getCard('CS2_182').cost + 2);
+  });
+});
