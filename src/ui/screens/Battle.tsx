@@ -23,6 +23,7 @@ type Mode =
   | { k: 'card'; handUid: number; stage: 'select' | 'choose' | 'place' | 'target'; option?: number; position?: number; side?: 'self' | 'opponent' }
   | { k: 'attack'; attacker: number }
   | { k: 'heroPower'; option?: number }
+  | { k: 'secondaryHeroPower' }
   | { k: 'powerChoose' };
 
 const AI_DELAY = { slow: 1300, normal: 800, fast: 350 };
@@ -59,7 +60,7 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
   const [version, setVersion] = useState(0);
   const refresh = useCallback(() => setVersion((v) => v + 1), []);
   const [mode, setMode] = useState<Mode>({ k: 'idle' });
-  const [inspect, setInspect] = useState<{ cardId: string; atk?: number; hp?: number; cost?: number; spellDamage?: number; uid?: number; def?: CardDef } | { power: PlayerId } | null>(null);
+  const [inspect, setInspect] = useState<{ cardId: string; atk?: number; hp?: number; cost?: number; spellDamage?: number; uid?: number; def?: CardDef } | { power: PlayerId; secondary?: boolean } | null>(null);
   const [banner, setBanner] = useState<{ id: number; cardId?: string; text: string } | null>(null);
   const [mulliganPick, setMulliganPick] = useState<Set<number>>(new Set());
   const [reward, setReward] = useState<{ gold: number; daily: number; result: 'win' | 'loss' | 'draw'; change?: LadderChange } | null>(null);
@@ -270,6 +271,7 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
     if (!s || !myTurn) return new Set<number>();
     if (mode.k === 'attack') return new Set(g.attackTargets(mode.attacker));
     if (mode.k === 'heroPower') return new Set(g.heroPowerTargets(mode.option));
+    if (mode.k === 'secondaryHeroPower') return new Set(g.secondaryHeroPowerTargets());
     if (mode.k === 'card' && mode.stage === 'target') {
       const req = g.playTargetReq(mode.handUid, mode.option);
       if (req) return new Set(g.validTargets(req, ME, g.cardIsSpell(mode.handUid)));
@@ -341,6 +343,7 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
   const onTarget = (uid: number) => {
     if (mode.k === 'attack') act({ type: 'attack', attacker: mode.attacker, target: uid });
     else if (mode.k === 'heroPower') act({ type: 'heroPower', target: uid, option: mode.option });
+    else if (mode.k === 'secondaryHeroPower') act({ type: 'secondaryHeroPower', target: uid });
     else if (mode.k === 'card') act({ type: 'play', handUid: mode.handUid, target: uid, option: mode.option, position: mode.position, side: mode.side });
   };
 
@@ -374,6 +377,21 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
     if (g.heroPowerOptions()) setMode({ k: 'powerChoose' });
     else if (g.heroPowerNeedsTarget()) setMode({ k: 'heroPower' });
     else act({ type: 'heroPower' });
+  };
+
+  const onSecondaryHeroPower = () => {
+    if (!myTurn) return;
+    if (!g.canSecondaryHeroPower()) {
+      const power = me.secondaryHeroPower;
+      flash(power?.used ? '本回合已使用過第二英雄能力' : '屍體不足或沒有合法目標');
+      return;
+    }
+    if (mode.k === 'secondaryHeroPower') {
+      setMode({ k: 'idle' });
+      return;
+    }
+    if (g.secondaryHeroPowerNeedsTarget()) setMode({ k: 'secondaryHeroPower' });
+    else act({ type: 'secondaryHeroPower' });
   };
 
   const onLaunch = () => {
@@ -418,6 +436,7 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
     }
     if (mode.k === 'attack') return '選擇攻擊目標；點其他地方取消';
     if (mode.k === 'heroPower') return '選擇英雄能力的目標';
+    if (mode.k === 'secondaryHeroPower') return '選擇第二英雄能力的目標';
     return '';
   })();
 
@@ -533,6 +552,9 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
               ))}
           </HeroView>
           <HeroPowerView p={foe} g={g} usable={false} onHover={(on) => setInspect(on ? { power: AI } : null)} />
+          {foe.secondaryHeroPower && (
+            <HeroPowerView p={foe} g={g} secondary usable={false} onHover={(on) => setInspect(on ? { power: AI, secondary: true } : null)} />
+          )}
           <StarshipView p={foe} g={g} usable={false} onHover={inspectShip(AI)} />
         </div>
       </div>
@@ -624,6 +646,17 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
             onClick={onHeroPower}
             onHover={(on) => setInspect(on ? { power: ME } : null)}
           />
+          {me.secondaryHeroPower && (
+            <HeroPowerView
+              p={me}
+              g={g}
+              secondary
+              usable={myTurn && g.canSecondaryHeroPower()}
+              active={mode.k === 'secondaryHeroPower'}
+              onClick={onSecondaryHeroPower}
+              onHover={(on) => setInspect(on ? { power: ME, secondary: true } : null)}
+            />
+          )}
           <StarshipView p={me} g={g} usable={myTurn && g.canLaunch().ok} onClick={onLaunch} onHover={inspectShip(ME)} />
         </div>
         <div className="hand my-hand" style={{ '--n': me.hand.length } as CSSProperties}>
@@ -693,15 +726,22 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
       )}
 
       {/* ---------------- 浮動資訊 ---------------- */}
-      {inspect && 'power' in inspect && (
-        <div className="inspect" onClick={() => setInspect(null)}>
-          <div className="power-card">
-            <b>{g.powerInfo(s.players[inspect.power]).name}</b>
-            <span className="muted small">英雄能力・消耗 {s.players[inspect.power].heroPower.cost}</span>
-            <p dangerouslySetInnerHTML={{ __html: formatCardText(g.powerInfo(s.players[inspect.power]).text) }} />
+      {inspect && 'power' in inspect && (() => {
+        const player = s.players[inspect.power];
+        const info = inspect.secondary ? g.secondaryPowerInfo(player) : g.powerInfo(player);
+        if (!info) return null;
+        const cost = inspect.secondary ? player.secondaryHeroPower?.cost ?? 0 : player.heroPower.cost;
+        const kind = inspect.secondary && g.secondaryPowerDef(player)?.costKind === 'corpses' ? '屍體' : '法力';
+        return (
+          <div className="inspect" onClick={() => setInspect(null)}>
+            <div className="power-card">
+              <b>{info.name}</b>
+              <span className="muted small">英雄能力・消耗 {cost} {kind}</span>
+              <p dangerouslySetInnerHTML={{ __html: formatCardText(info.text) }} />
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
       {inspect && 'cardId' in inspect && hasCard(inspect.cardId) && (
         <div className="inspect" onClick={() => setInspect(null)}>
           <CardView cardId={inspect.cardId} def={inspect.def} width={220} cost={inspect.cost} attack={inspect.atk} health={inspect.hp} spellDamage={inspect.spellDamage} />
@@ -1148,6 +1188,7 @@ function HeroPowerView({
   g,
   usable,
   active,
+  secondary,
   onClick,
   onHover,
 }: {
@@ -1155,14 +1196,19 @@ function HeroPowerView({
   g: Game;
   usable: boolean;
   active?: boolean;
+  secondary?: boolean;
   onClick?: () => void;
   onHover?: (on: boolean) => void;
 }) {
-  const info = g.powerInfo(p);
+  const inst = secondary ? p.secondaryHeroPower : p.heroPower;
+  const info = secondary ? g.secondaryPowerInfo(p) : g.powerInfo(p);
+  if (!inst || !info) return null;
+  const corpseCost = secondary && g.secondaryPowerDef(p)?.costKind === 'corpses';
   return (
     <button
       data-power={p.id}
-      className={`hero-power ${p.heroPower.used ? 'used' : ''} ${usable ? 'usable' : ''} ${active ? 'active' : ''}`}
+      data-secondary-power={secondary || undefined}
+      className={`hero-power ${inst.used ? 'used' : ''} ${usable ? 'usable' : ''} ${active ? 'active' : ''}`}
       onClick={(e) => {
         e.stopPropagation();
         onClick?.();
@@ -1170,8 +1216,8 @@ function HeroPowerView({
       onMouseEnter={() => onHover?.(true)}
       onMouseLeave={() => onHover?.(false)}
     >
-      <Art cardId={p.heroPower.id} className="hp-art" label={info.name.slice(0, 2)} color={CLASS_COLORS[p.heroClass]} />
-      <span className="hp-cost">{p.heroPower.cost}</span>
+      <Art cardId={inst.id} className="hp-art" label={info.name.slice(0, 2)} color={CLASS_COLORS[p.heroClass]} />
+      <span className="hp-cost">{corpseCost ? '💀' : ''}{inst.cost}</span>
       <span className="hp-name">{info.name}</span>
     </button>
   );
