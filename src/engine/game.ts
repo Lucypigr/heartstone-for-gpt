@@ -3544,6 +3544,16 @@ export class Game {
         }
         break;
       }
+      case 'shuffleHandsTogether': {
+        const mineCount = me.hand.length;
+        const theirsCount = foe.hand.length;
+        const mixed = shuffle(s, [...me.hand, ...foe.hand]);
+        me.hand = mixed.slice(0, mineCount);
+        foe.hand = mixed.slice(mineCount, mineCount + theirsCount);
+        this.recombineShatter(me);
+        this.recombineShatter(foe);
+        break;
+      }
       case 'hellraiser': {
         if (!me.deck.length) {
           const src = ctx.sourceUid !== null ? this.minion(ctx.sourceUid) : null;
