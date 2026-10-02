@@ -944,6 +944,8 @@ export class Game {
         if (this.over) return;
       }
     }
+    // 伊莉妲‧逐罪者：這是額外「取得」卡牌，不算正常抽牌，也不會阻止疲勞。
+    if (p.voidDeck?.length) this.getFromVoid(p, 2);
     // 時光凍結者：回合開始時不再抽牌
     if (p.board.some((m) => !m.silenced && getCard(m.cardId).flags?.includes('noTurnDraw'))) return;
     yield* this.draw(p, 1);
@@ -1482,6 +1484,18 @@ export class Game {
     p.hand.push(card);
     this.recombineShatter(p);
     return card;
+  }
+
+  /** 從伊莉妲的虛無區隨機取回卡牌；這是「取得」而非抽牌。 */
+  private getFromVoid(p: PlayerState, count: number) {
+    if (!p.voidDeck?.length) return;
+    for (let i = 0; i < count && p.voidDeck.length; i++) {
+      const card = pick(this.s, p.voidDeck);
+      if (!card) break;
+      p.voidDeck.splice(p.voidDeck.indexOf(card), 1);
+      this.enterHandCard(p, card);
+      this.log(p.id, `${p.name}從虛無取得了${this.name(card.cardId)}`);
+    }
   }
 
   /** 左、右碎裂半片相鄰時，立即重組成原卡；重組後不會再次碎裂。 */
@@ -2989,6 +3003,18 @@ export class Game {
           me.secondaryHeroPower = { id: def.id, used: false, cost: def.cost, sourceCardId: ctx.sourceCardId };
           this.log(me.id, `${me.name}獲得了第二英雄能力【${def.name}】`);
         }
+        break;
+      }
+      case 'sendDeckToVoidExceptOne': {
+        // 36.2.2 後保留 1 張在牌庫。牌庫本身已隨機洗牌，因此保留目前最上方那張。
+        if (me.deck.length > 1) {
+          const keep = me.deck[me.deck.length - 1];
+          me.voidDeck = me.deck.filter((h) => h !== keep);
+          me.deck = [keep];
+        } else {
+          me.voidDeck = [];
+        }
+        this.log(me.id, `${me.name}把 ${me.voidDeck.length} 張牌送入了虛無`);
         break;
       }
       case 'counter':
