@@ -319,8 +319,10 @@ const TARGET_RULES: TargetRule[] = [
   [/^all other enemy minions/, () => all({ type: 'minion', side: 'enemy', excludeChosen: true })],
   [/^(?:all enemies|all enemy characters)/, () => all({ type: 'character', side: 'enemy' })],
   [/^(?:all friendly characters|your characters)/, () => all({ type: 'character', side: 'friendly' })],
+  [/^all your other minions/, () => all({ type: 'minion', side: 'friendly', excludeSelf: true })],
   [/^all other minions/, () => all({ type: 'minion', side: 'any', excludeSelf: true })],
   [/^all minions with (\d+) or (less|more) Attack/, (m) => all(atkFilter({ type: 'minion', side: 'any' }, m[1], m[2]))],
+  [/^your damaged minions/, () => all({ type: 'minion', side: 'friendly', damaged: true })],
   [/^all damaged minions/, () => all({ type: 'minion', side: 'any', damaged: true })],
   [/^all minions/, () => all({ type: 'minion', side: 'any' })],
   [
@@ -476,6 +478,9 @@ export function parsePool(phrase: string): Pool | null {
     s = '';
   } else if ((m = /^that costs \((\d+)\) or less$/.exec(s))) {
     pool.maxCost = Number(m[1]);
+    s = '';
+  } else if ((m = /^that costs \((\d+)\) or more$/.exec(s))) {
+    pool.minCost = Number(m[1]);
     s = '';
   }
   if (s) return null;
@@ -973,10 +978,19 @@ const ACTIONS: ActionRule[] = [
       effects = [{ e: 'summonRandom', pool, count: num(mm[1]), who: 'self' }];
       rest = rest.slice(mm[0].length);
     } else {
-      const tok = parseStatToken(rest, ctx, 'MINION') ?? parseNamedToken(rest, ctx, 'MINION');
-      if (!tok) fail(`summon: ${rest}`);
-      effects = [{ e: 'summon', card: tok.card, count: tok.count, who: 'self' }];
-      rest = tok.rest;
+      // 「Summon an 8-Cost minion」「Summon a 2-Cost Taunt minion」等沒有指定卡名的隨機卡池召喚。
+      const pm = new RegExp(`^(${COUNT_RE}) (.+?)(?=$|[,.]| and )`).exec(rest);
+      const pool = pm ? parsePool(`${pm[1]} ${pm[2]}`) : null;
+      if (pm && pool) {
+        pool.type = 'MINION';
+        effects = [{ e: 'summonRandom', pool, count: num(pm[1]), who: 'self' }];
+        rest = rest.slice(pm[0].length);
+      } else {
+        const tok = parseStatToken(rest, ctx, 'MINION') ?? parseNamedToken(rest, ctx, 'MINION');
+        if (!tok) fail(`summon: ${rest}`);
+        effects = [{ e: 'summon', card: tok.card, count: tok.count, who: 'self' }];
+        rest = tok.rest;
+      }
     }
     if ((mm = /^ for your opponent/.exec(rest))) {
       for (const e of effects) if ('who' in e) (e as { who: string }).who = 'opponent';
@@ -1209,6 +1223,10 @@ const CONDITIONS: [RegExp, (m: RegExpExecArray) => Condition][] = [
   [/^you have a weapon equipped/, () => ({ c: 'weapon' })],
   [/^your hero attacked this turn/, () => ({ c: 'heroAttacked' })],
   [/^you have (\d+) Mana Crystals/, (m) => ({ c: 'maxMana', n: Number(m[1]) })],
+  [/^you have (\d+) or more Mana(?: Crystals?)?/, (m) => ({ c: 'maxMana', n: Number(m[1]) })],
+  [/^your deck has (\d+) or more cards/, (m) => ({ c: 'deckSize', op: '>=', n: Number(m[1]) })],
+  [/^your deck has (\d+) or (?:fewer|less) cards/, (m) => ({ c: 'deckSize', op: '<=', n: Number(m[1]) })],
+  [/^your deck has no Neutral cards/, () => ({ c: 'deckNoNeutral' })],
   [/^your deck (?:has|contains) no duplicates/, () => ({ c: 'noDuplicates' })],
   [/^you played an Elemental last turn/, () => ({ c: 'playedElementalLastTurn' })],
   [/^it's your opponent's turn/, () => ({ c: 'opponentTurn' })],
@@ -1453,6 +1471,17 @@ function parseStatic(sentence: string, ctx: Ctx): boolean {
     if (b.hp) aura.hp = b.hp as number;
     if (b.keywords) aura.keywords = b.keywords;
     out.auras.push(aura);
+    return true;
+  }
+  if ((m = /^All friendly minions are (.+)$/.exec(sentence))) {
+    const b = parseBuff(m[1]);
+    if (!b || b.rest || b.temp) fail(`aura buff: ${m[1]}`);
+    out.auras.push({
+      scope: 'friendlyMinions',
+      atk: typeof b.atk === 'number' ? b.atk : undefined,
+      hp: typeof b.hp === 'number' ? b.hp : undefined,
+      keywords: b.keywords,
+    });
     return true;
   }
   if ((m = /^Your hero has \+(\d+) Attack$/.exec(sentence))) {
