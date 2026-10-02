@@ -1906,6 +1906,9 @@ export class Game {
             case 'otherFriendly':
               applies = src !== m && src.owner === m.owner && raceOk;
               break;
+            case 'friendlyMinions':
+              applies = src.owner === m.owner && raceOk;
+              break;
             case 'adjacent': {
               if (src.owner !== m.owner) break;
               const board = this.s.players[m.owner].board;
@@ -2354,6 +2357,10 @@ export class Game {
         return p.heroAttackedThisTurn;
       case 'handSize':
         return c.op === '>=' ? p.hand.length >= c.n : p.hand.length <= c.n;
+      case 'deckSize':
+        return c.op === '>=' ? p.deck.length >= c.n : p.deck.length <= c.n;
+      case 'deckNoNeutral':
+        return p.deck.every((h) => !cardClasses(getCard(h.cardId)).includes('NEUTRAL'));
       case 'maxMana':
         return p.maxMana >= c.n;
       case 'opponentTurn':
