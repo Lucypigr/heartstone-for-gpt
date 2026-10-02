@@ -143,7 +143,7 @@ describe('2026：預備（Prepare）', () => {
     expect(target.maxHp).toBe(10);
   });
 
-  it('法力很多時只花到足以把目前費用降成 0', () => {
+  it('法力很多時仍消耗全部剩餘法力，超額降費後實際費用最低為 0', () => {
     const g = newGame();
     const uid = give(g, 'JAIL_913');
     const p = g.s.players[0];
@@ -152,8 +152,8 @@ describe('2026：預備（Prepare）', () => {
 
     expect(g.apply({ type: 'prepare', handUid: uid })).toBe(true);
     const hc = p.hand.find((h) => h.uid === uid)!;
-    expect(p.mana).toBe(6); // 5 費牌只需投入 4，再加額外 -1 即為 0 費
-    expect(hc.prepareDiscount).toBe(5);
+    expect(p.mana).toBe(0);
+    expect(hc.prepareDiscount).toBe(11);
     expect(g.costOf(p, hc)).toBe(0);
     expect(p.cardsPlayedThisTurn).toBe(beforePlayed);
   });
