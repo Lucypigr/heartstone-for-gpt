@@ -1068,15 +1068,14 @@ export class Game {
   }
 
   /**
-   * 預備：投入剩餘法力，永久減少「投入量 + 1」。
-   * 投入量最多到能把目前費用降到 0 所需要的數量；不算出牌，並鎖到下回合。
+   * 預備：消耗所有剩餘法力，永久減少「消耗量 + 1」。
+   * 降費可以超過卡牌目前費用，但實際費用最低仍為 0；不算出牌，並鎖到下回合。
    */
   private prepare(handUid: number) {
     const p = this.me;
     const hc = p.hand.find((h) => h.uid === handUid)!;
-    const currentCost = this.costOf(p, hc);
-    const spend = Math.min(p.mana, Math.max(1, currentCost - 1));
-    p.mana -= spend;
+    const spend = p.mana;
+    p.mana = 0;
     hc.prepareDiscount = (hc.prepareDiscount ?? 0) + spend + 1;
     hc.prepared = true;
     hc.preparedTurn = this.s.turn;
