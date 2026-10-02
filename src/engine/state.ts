@@ -61,6 +61,10 @@ export interface HandCard {
   opponentCopyPlayedSeen?: boolean;
   /** Slime 'em! 產生的 Ectoplasm：保留原施法者場上的手下名單。 */
   ectoplasmMinions?: string[];
+  /** Godfather Kazakus：自訂審判的兩個效果與延遲。 */
+  trialEffects?: string[];
+  trialCost?: number;
+  trialDelay?: number;
 }
 
 export interface Minion {
@@ -232,6 +236,10 @@ export interface PlayerState {
   /** Godfrey：被爆掉、等待手牌有空位後返回的卡 */
   overdrawReturn?: HandCard[];
   godfreyOverdraw?: boolean;
+  /** 紫羅蘭堡組牌副牌（Beatrix / King of the Underbelly） */
+  sideboards?: Record<string, string[]>;
+  /** Aya：本場以哪一種強化假幣取代普通 Coin */
+  coinReplacement?: string;
   /** Mug'Zee 被動英雄能力使用的手下計數 */
   minionsPlayedThisTurn?: number;
   minionsPlayedThisGame?: number;
