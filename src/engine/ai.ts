@@ -17,6 +17,7 @@ export function legalActions(g: Game): Action[] {
   const out: Action[] = [];
   for (const hc of p.hand) {
     const def = getCard(hc.cardId);
+    if (g.canPrepare(hc.uid).ok) out.push({ type: 'prepare', handUid: hc.uid });
     const options = def.chooseOne ? def.chooseOne.map((_o, i) => i) : [undefined];
     for (const option of options) {
       if (!g.canPlay(hc.uid, option).ok) continue;
@@ -100,6 +101,9 @@ export function evaluate(g: Game, me: PlayerId, w: EvalWeights = DEFAULT_WEIGHTS
   // 回音的複製回合結束就會消失，不算手牌優勢
   const handSize = (p: typeof a) => p.hand.filter((h) => !h.echo).length;
   score += Math.min(handSize(a), 8) * 1.6 - Math.min(handSize(b), 8) * 0.8;
+  // 預備的永久減費是未來節奏價值，讓 AI 願意在合適時機投資剩餘法力。
+  const preparedValue = (p: typeof a) => p.hand.reduce((v, h) => v + Math.min(h.prepareDiscount ?? 0, 8) * 0.55, 0);
+  score += preparedValue(a) - preparedValue(b) * 0.45;
   if (a.weapon) score += a.weapon.atk * Math.min(a.weapon.durability, 3) * 0.6;
   if (b.weapon) score -= b.weapon.atk * Math.min(b.weapon.durability, 3) * 0.6;
   score += a.secrets.length * 2 - b.secrets.length * 2;
