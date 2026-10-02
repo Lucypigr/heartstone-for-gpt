@@ -203,6 +203,45 @@ describe('2026：碎裂（Shatter）', () => {
     expect(p.hand[0].cardId).toBe('CATA_479');
     expect(p.hand[0].shatterCombined).toBe(true);
   });
+
+
+  it('荒林之環完整牌：召喚兩個樹人，並賦予目前所有友方手下樹人亡語', () => {
+    const g = newGame();
+    const p = g.s.players[0];
+    p.board = [];
+    const yeti = put(g, 'CS2_182', 0);
+
+    play(g, 'CATA_134');
+
+    expect(p.board).toHaveLength(3);
+    expect(p.board.filter((m) => m.cardId === 'EX1_158t')).toHaveLength(2);
+    for (const m of p.board) {
+      expect(m.abilities.some((a) => a.on.k === 'deathrattle')).toBe(true);
+    }
+
+    const treant = p.board.find((m) => m.cardId === 'EX1_158t')!;
+    play(g, 'CS2_029', treant.uid);
+    expect(p.board.filter((m) => m.cardId === 'EX1_158t')).toHaveLength(2);
+    expect(p.board.includes(yeti)).toBe(true);
+  });
+
+  it('分裂完整牌：先給 +2/+3 與 Elusive，再複製強化後的友方手下', () => {
+    const g = newGame();
+    const p = g.s.players[0];
+    p.board = [];
+    const yeti = put(g, 'CS2_182', 0);
+
+    play(g, 'CATA_306', yeti.uid);
+
+    expect(p.board).toHaveLength(2);
+    const [original, copy] = p.board;
+    expect(g.atkOf(original)).toBe(6);
+    expect(original.maxHp).toBe(8);
+    expect(g.hasKw(original, 'ELUSIVE')).toBe(true);
+    expect(g.atkOf(copy)).toBe(6);
+    expect(copy.maxHp).toBe(8);
+    expect(g.hasKw(copy, 'ELUSIVE')).toBe(true);
+  });
 });
 
 describe('戰鬥', () => {

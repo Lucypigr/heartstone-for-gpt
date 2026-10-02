@@ -716,6 +716,46 @@ export const OVERRIDES: Record<string, Override> = {
   // 克蘇恩眼柄：克蘇恩獲得攻擊力或生命值時，它也會獲得（由引擎處理）
   WON_144: { keywords: ['TAUNT', 'LIFESTEAL'] },
 
+  // ------------------------------------------------------------------ 2026《浩劫與重生》：碎裂
+  // 荒林之環：完整牌先召喚兩個 2/2 樹人，再賦予你的手下「亡語：召喚一個 2/2 樹人」。
+  CATA_134: {
+    abilities: play(
+      { e: 'summon', card: 'EX1_158t', count: 2, who: 'self' },
+      { e: 'buff', target: allFriendly, abilities: dr({ e: 'summon', card: 'EX1_158t', count: 1, who: 'self' }) },
+    ),
+    tokens: ['EX1_158t'],
+  },
+  // 荒林之環（碎片 1）：召喚兩個 2/2 樹人。
+  CATA_134t: {
+    abilities: play({ e: 'summon', card: 'EX1_158t', count: 2, who: 'self' }),
+    tokens: ['EX1_158t'],
+  },
+  // 荒林之環（碎片 2）：賦予你的手下「亡語：召喚一個 2/2 樹人」。
+  CATA_134t2: {
+    abilities: play({ e: 'buff', target: allFriendly, abilities: dr({ e: 'summon', card: 'EX1_158t', count: 1, who: 'self' }) }),
+    tokens: ['EX1_158t'],
+  },
+
+  // 分裂：完整牌先使一個友方手下 +2/+3 並獲得 Elusive，再召喚該「已強化後」手下的複製。
+  // 這個順序符合官方特殊規則：完整分裂可以複製剛獲得 Elusive 的目標。
+  CATA_306: {
+    target: friendlyMinion,
+    abilities: play(
+      { e: 'buff', target: { t: 'chosen' }, atk: 2, hp: 3, keywords: ['ELUSIVE'] },
+      { e: 'summonCopy', target: { t: 'chosen' }, count: 1 },
+    ),
+  },
+  // 分裂（碎片 1）：+2/+3 並獲得 Elusive。
+  CATA_306t1: {
+    target: friendlyMinion,
+    abilities: play({ e: 'buff', target: { t: 'chosen' }, atk: 2, hp: 3, keywords: ['ELUSIVE'] }),
+  },
+  // 分裂（碎片 2）：召喚一個友方手下的複製。
+  CATA_306t2: {
+    target: friendlyMinion,
+    abilities: play({ e: 'summonCopy', target: { t: 'chosen' }, count: 1 }),
+  },
+
   // ------------------------------------------------------------------ 回音
   // 葛林達‧鴉羽：你手牌中的手下具有回音
   GIL_618: { auras: [{ scope: 'friendlyHand', keywords: ['ECHO'] }] },
