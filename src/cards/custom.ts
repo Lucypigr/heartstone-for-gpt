@@ -23,4 +23,32 @@
 // ============================================================================
 import type { CardDef } from '../engine/types';
 
-export const CUSTOM_CARDS: CardDef[] = [];
+export const CUSTOM_CARDS: CardDef[] = [
+  {
+    id: 'VH_SKELETON_REFRESH',
+    dbfId: 9900319,
+    name: '刷新選項',
+    nameEn: 'Refresh Options',
+    text: '重新刷新發現選項。每次刷新有 20% 機率受到 5 點傷害。',
+    type: 'SPELL',
+    cardClass: 'MAGE',
+    rarity: 'FREE',
+    set: 9999,
+    cost: 0,
+    collectible: false,
+  },
+  {
+    id: 'VH_ECTOPLASM',
+    dbfId: 9900805,
+    name: '靈質',
+    nameEn: 'Ectoplasm',
+    text: '重新召喚被《Slime \'em!》消滅的手下。',
+    type: 'SPELL',
+    cardClass: 'PRIEST',
+    rarity: 'FREE',
+    set: 9999,
+    cost: 3,
+    collectible: false,
+    abilities: [{ on: { k: 'play' }, effects: [{ e: 'custom', fn: 'ectoplasm' }] }],
+  },
+];
