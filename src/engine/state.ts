@@ -40,6 +40,8 @@ export interface HandCard {
   chooseOneCombined?: boolean;
   /** 紫羅蘭堡薩滿法術：在手牌中累積看見的施法次數 */
   spellTransformProgress?: number;
+  /** Picklock 打出瞬間鎖定的剩餘法力值 */
+  lockedManaValue?: number;
   /** Breakout Architect：這張法術打出時效果會施放兩次 */
   castTwice?: boolean;
   /** SI:7：這張牌在手中時曾有友方潛行手下攻擊 */
@@ -181,6 +183,8 @@ export interface PlayerState {
   mana10AfterTurns?: number;
   /** 延遲的效果（例如「2 回合後召喚…」） */
   delayed?: { turns: number; effects: Effect[]; sourceCardId: string }[];
+  /** 有限回合持續的目標法術（例如 Reinforcement Aura） */
+  objectives?: { remaining: number; effects: Effect[]; sourceCardId: string }[];
   /** 本場對戰剩下的時間都有效的能力（例如「在你的回合結束時對對手造成 3 點傷害」） */
   eternal?: { ability: Ability; sourceCardId: string }[];
   /** 你的手下在這個回合消耗增加（對手的冰涼腳丫等） */
