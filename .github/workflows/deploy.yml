@@ -26,15 +26,6 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run cards
-      - run: npx tsx scripts/dev/inspect-corrupt.ts
-      - name: Upload card build diagnostics
-        uses: actions/upload-artifact@v4
-        with:
-          name: card-build-diagnostics
-          path: |
-            .cache/unsupported.txt
-            .cache/corrupt.json
-            src/data/cards.json
       - run: npm test
       - run: npm run build
       - uses: actions/configure-pages@v5
