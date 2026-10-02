@@ -287,6 +287,9 @@ export class Game {
       case 'heroPower':
         this.drive(this.wrap(this.useHeroPower(action.target, action.option)));
         return true;
+      case 'secondaryHeroPower':
+        this.drive(this.wrap(this.useSecondaryHeroPower(action.target)));
+        return true;
       case 'trade':
         this.drive(this.wrap(this.trade(action.handUid)));
         return true;
@@ -335,6 +338,15 @@ export class Game {
         const def = this.powerDef(p);
         if (def.chooseOne && (action.option === undefined || !def.chooseOne[action.option])) return { ok: false, reason: '請選擇一個選項' };
         const req = this.powerTarget(p, action.option);
+        if (req) {
+          const valid = this.validTargets(req, s.current, true);
+          if (action.target === undefined || !valid.includes(action.target)) return { ok: false, reason: '請選擇目標' };
+        }
+        return { ok: true };
+      }
+      case 'secondaryHeroPower': {
+        if (!this.canSecondaryHeroPower()) return { ok: false, reason: '無法使用第二英雄能力' };
+        const req = this.secondaryPowerDef(p)?.target;
         if (req) {
           const valid = this.validTargets(req, s.current, true);
           if (action.target === undefined || !valid.includes(action.target)) return { ok: false, reason: '請選擇目標' };
@@ -694,6 +706,41 @@ export class Game {
     return true;
   }
 
+  /** 額外解鎖的第二英雄能力定義。 */
+  secondaryPowerDef(p: PlayerState) {
+    if (!p.secondaryHeroPower) return null;
+    return getCard(p.secondaryHeroPower.sourceCardId).secondaryHeroPower ?? null;
+  }
+
+  secondaryPowerInfo(p: PlayerState): { name: string; text: string; cost: number; costKind: 'mana' | 'corpses' } | null {
+    const def = this.secondaryPowerDef(p);
+    if (!def || !p.secondaryHeroPower) return null;
+    return { name: def.name, text: def.text, cost: p.secondaryHeroPower.cost, costKind: def.costKind ?? 'mana' };
+  }
+
+  secondaryHeroPowerTargets(): number[] {
+    const def = this.secondaryPowerDef(this.me);
+    return def?.target ? this.validTargets(def.target, this.s.current, true) : [];
+  }
+
+  secondaryHeroPowerNeedsTarget(): boolean {
+    return !!this.secondaryPowerDef(this.me)?.target;
+  }
+
+  canSecondaryHeroPower(): boolean {
+    const p = this.me;
+    const inst = p.secondaryHeroPower;
+    const def = this.secondaryPowerDef(p);
+    if (!inst || !def || inst.used) return false;
+    const costKind = def.costKind ?? 'mana';
+    if (costKind === 'corpses') {
+      if ((p.corpses ?? 0) < inst.cost) return false;
+    } else if (p.mana < inst.cost) return false;
+    if (def.needsBoardSpace && p.board.length >= MAX_BOARD) return false;
+    if (def.target && !this.validTargets(def.target, this.s.current, true).length) return false;
+    return true;
+  }
+
   maxAttacks(c: Char): number {
     if (isHero(c)) {
       const w = this.s.players[c.owner].weapon;
@@ -865,6 +912,7 @@ export class Game {
     p.mana = Math.max(0, p.maxMana - p.overloadOwed);
     p.overloadOwed = 0;
     p.heroPower.used = false;
+    if (p.secondaryHeroPower) p.secondaryHeroPower.used = false;
     p.cardsPlayedThisTurn = 0;
     p.spellsThisTurn = 0;
     p.drawnThisTurn = 0;
@@ -1154,6 +1202,28 @@ export class Game {
     ctx.isHeroPower = true;
     ctx.lifesteal = !!def.lifesteal;
     yield* this.runEffects(effects, ctx);
+    yield* this.emit({ k: 'heroPower', player: p.id });
+  }
+
+  private *useSecondaryHeroPower(target: number | undefined): Gen {
+    const p = this.me;
+    const inst = p.secondaryHeroPower!;
+    const def = this.secondaryPowerDef(p)!;
+    if ((def.costKind ?? 'mana') === 'corpses') {
+      p.corpses = Math.max(0, (p.corpses ?? 0) - inst.cost);
+      p.corpsesSpent = (p.corpsesSpent ?? 0) + inst.cost;
+    } else p.mana -= inst.cost;
+    inst.used = true;
+    p.heroPowersUsed++;
+    this.log(p.id, `${p.name}使用了第二英雄能力【${def.name}】`);
+    this.fx({ kind: 'play', cardId: inst.id, player: p.id, target });
+    const ctx = this.baseCtx(p.id);
+    ctx.sourceUid = p.hero.uid;
+    ctx.sourceCardId = inst.id;
+    ctx.chosen = target ?? null;
+    ctx.isHeroPower = true;
+    ctx.lifesteal = !!def.lifesteal;
+    yield* this.runEffects(def.effects, ctx);
     yield* this.emit({ k: 'heroPower', player: p.id });
   }
 
@@ -2816,6 +2886,7 @@ export class Game {
         break;
       case 'refreshHeroPower':
         me.heroPower.used = false;
+        if (me.secondaryHeroPower) me.secondaryHeroPower.used = false;
         break;
       case 'minionAtkBonus':
         me.minionAtkBonus = (me.minionAtkBonus ?? 0) + e.amount;
@@ -2910,6 +2981,14 @@ export class Game {
         const originals = [...me.deck].filter((h) => h.cardId !== ctx.sourceCardId && getCard(h.cardId).rarity === 'LEGENDARY');
         for (const hc of originals) me.deck.push({ ...structuredClone(hc), uid: this.uid() });
         this.log(me.id, `${this.name(ctx.sourceCardId)}複製了 ${originals.length} 張其他傳說卡`);
+        break;
+      }
+      case 'grantSecondaryHeroPower': {
+        const def = getCard(ctx.sourceCardId).secondaryHeroPower;
+        if (def) {
+          me.secondaryHeroPower = { id: def.id, used: false, cost: def.cost, sourceCardId: ctx.sourceCardId };
+          this.log(me.id, `${me.name}獲得了第二英雄能力【${def.name}】`);
+        }
         break;
       }
       case 'counter':
