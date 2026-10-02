@@ -29,8 +29,22 @@ jobs:
           console.log('VIOLET_HOLD_SUPPORTED=' + cards.length);
           console.log('VIOLET_HOLD_IDS=' + cards.map((c) => c.id).join(','));
           NODE
-          grep $'\t1988\t' .cache/unsupported.txt > violet-hold-unsupported.txt || true
+          grep 
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: violet-hold-card-diagnostics
+          path: |
+            card-build.log
+            violet-hold-unsupported.txt
+            .cache/unsupported.txt
+            src/data/cards.json
+            violet-hold-entities.json
+      - run: npm test
+      - run: npm run build
+\t1988\t' .cache/unsupported.txt > violet-hold-unsupported.txt || true
           echo "VIOLET_HOLD_UNSUPPORTED=$(wc -l < violet-hold-unsupported.txt)"
+          npx tsx scripts/dump-violet.ts
       - uses: actions/upload-artifact@v4
         if: always()
         with:
