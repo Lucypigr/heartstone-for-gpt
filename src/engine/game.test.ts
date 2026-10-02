@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getCard } from '../cards/registry';
+import { cardClasses, COLLECTIBLE, getCard } from '../cards/registry';
 import { Game } from './game';
 import { MAX_BOARD, type Minion, type PlayerId } from './state';
 
@@ -531,6 +531,80 @@ describe('2026：紫羅蘭堡薩滿法術變形', () => {
       expect(g.apply({ type: 'play', handUid: coin })).toBe(true);
     }
     expect(p.hand.find((h) => h.uid === uid)?.cardId).toBe('JAIL_801');
+  });
+});
+
+describe('紫羅蘭堡最後特殊卡 2B', () => {
+  it('Aya 在只有一方放入時強制該玩家後手', () => {
+    const ayaDeck = ['JAIL_504', ...Array(29).fill(FILLER)];
+    const other = Array(30).fill(FILLER);
+    const g = Game.create({
+      decks: [ayaDeck, other],
+      classes: ['ROGUE', 'MAGE'],
+      names: ['Aya', 'Other'],
+      ai: [false, false],
+      seed: 1,
+      first: 0,
+    });
+    expect(g.s.first).toBe(1);
+  });
+
+  it('Commander Beatrix 把指定副牌手下的10張生成複製加入牌庫', () => {
+    const deck = ['JAIL_397', ...Array(29).fill(FILLER)];
+    const g = Game.create({
+      decks: [deck, Array(30).fill(FILLER)],
+      sideboards: [{ JAIL_397: ['CS2_172'] }, undefined],
+      classes: ['PALADIN', 'MAGE'],
+      names: ['B', 'O'],
+      ai: [false, false],
+      seed: 2,
+      first: 0,
+    });
+    const p = g.s.players[0];
+    const total = [...p.deck, ...p.hand].filter((h) => h.cardId === 'CS2_172').length;
+    expect(total).toBe(10);
+  });
+
+  it('King of the Underbelly 只從設定的3張違禁野獸發現並減3費', () => {
+    const beasts = COLLECTIBLE.filter((d) => {
+      const cls = cardClasses(d);
+      return d.type === 'MINION' && !!(d.races?.includes('BEAST') || d.races?.includes('ALL')) && !cls.includes('HUNTER') && !cls.includes('NEUTRAL');
+    }).slice(0, 3);
+    expect(beasts).toHaveLength(3);
+    const g = Game.create({
+      decks: [Array(30).fill(FILLER), Array(30).fill(FILLER)],
+      sideboards: [{ JAIL_831: beasts.map((d) => d.id) }, undefined],
+      classes: ['HUNTER', 'MAGE'],
+      names: ['K', 'O'],
+      ai: [false, false],
+      seed: 3,
+      first: 0,
+    });
+    g.apply({ type: 'mulligan', player: 0, replace: [] });
+    g.apply({ type: 'mulligan', player: 1, replace: [] });
+    const uid = give(g, 'JAIL_831');
+    expect(g.apply({ type: 'play', handUid: uid, position: 0 })).toBe(true);
+    expect(g.s.pendingChoice?.options.every((id) => beasts.some((b) => b.id === id))).toBe(true);
+    const picked = g.s.pendingChoice!.options[0];
+    expect(g.apply({ type: 'choose', index: 0 })).toBe(true);
+    const h = g.s.players[0].hand.find((x) => x.cardId === picked);
+    expect(h?.costMod).toBe(-3);
+  });
+
+  it('Godfather Kazakus 完成兩次效果選擇與一次長度選擇後產生審判', () => {
+    const g = newGame();
+    const uid = give(g, 'CAP_405');
+    expect(g.apply({ type: 'play', handUid: uid, position: 0 })).toBe(true);
+    expect(g.s.pendingChoice?.options).toHaveLength(3);
+    expect(g.apply({ type: 'choose', index: 0 })).toBe(true);
+    expect(g.s.pendingChoice?.options).toHaveLength(3);
+    expect(g.apply({ type: 'choose', index: 0 })).toBe(true);
+    expect(g.s.pendingChoice?.options).toEqual(['VH_TRIAL_RUSHED', 'VH_TRIAL_GRUELING', 'VH_TRIAL_UNENDING']);
+    expect(g.apply({ type: 'choose', index: 0 })).toBe(true);
+    const trial = g.s.players[0].hand.find((h) => h.cardId === 'VH_SHAM_TRIAL');
+    expect(trial?.trialEffects).toHaveLength(2);
+    expect(trial?.trialCost).toBe(7);
+    expect(trial?.trialDelay).toBe(0);
   });
 });
 
