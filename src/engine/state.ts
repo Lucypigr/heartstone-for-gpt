@@ -76,6 +76,8 @@ export interface Minion {
   sleeping: boolean;
   /** 本回合被召喚（突襲判定用） */
   summonedTurn: number;
+  /** 紫羅蘭堡休眠：還要經過幾個擁有者回合才甦醒。休眠中不能被互動或觸發能力。 */
+  dormantTurns?: number;
   attacks: number;
   playOrder: number;
   dead: boolean;
@@ -187,6 +189,8 @@ export interface PlayerState {
   endOfTurnCards?: string[];
   /** 伊莉妲‧逐罪者：從牌庫送入虛無、之後每回合取回的牌 */
   voidDeck?: HandCard[];
+  /** Void Soul 下一次召喚的惡魔費用；每施放一張提升 1。 */
+  voidSoulLevel?: number;
   /** 洗進對手牌堆的瘟疫數 */
   plaguesShuffled?: number;
   fatigue: number;
