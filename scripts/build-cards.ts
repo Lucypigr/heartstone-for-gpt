@@ -445,7 +445,7 @@ async function main() {
     (r) =>
       r.tags.COLLECTIBLE &&
       (typeOf(r) || (r.tags.CARDTYPE === 3 && OVERRIDES[r.id])) &&
-      !EXCLUDED_SETS.has(r.tags.CARD_SET) &&
+      (!EXCLUDED_SETS.has(r.tags.CARD_SET) || !!OVERRIDES[r.id]) &&
       CLASS_MAP[r.tags.CLASS ?? 12],
   );
   // 同名卡去重（核心 / 傳統 / 原版會重複），優先原始版本
