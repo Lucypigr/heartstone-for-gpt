@@ -114,6 +114,32 @@ describe('法術', () => {
   });
 });
 
+describe('2026：開局效果（Start of Game）', () => {
+  it('破鏈者霍格會在起手抽牌前複製牌庫中的其他傳說卡，但不複製自己', () => {
+    const deck = [
+      'JAIL_384',
+      'EX1_572', // 伊瑟拉（傳說）
+      'EX1_561', // 雅立史卓莎（傳說）
+      ...Array(27).fill(FILLER),
+    ];
+    const g = Game.create({
+      decks: [deck, Array(30).fill(FILLER)],
+      classes: ['WARRIOR', 'MAGE'],
+      names: ['玩家', '電腦'],
+      ai: [false, false],
+      seed: 42,
+      first: 0,
+    });
+    const all = [...g.s.players[0].deck, ...g.s.players[0].hand].map((h) => h.cardId);
+    const count = (id: string) => all.filter((x) => x === id).length;
+
+    expect(count('JAIL_384')).toBe(1);
+    expect(count('EX1_572')).toBe(2);
+    expect(count('EX1_561')).toBe(2);
+    expect(all).toHaveLength(32);
+  });
+});
+
 describe('2026：預備（Prepare）', () => {
   it('投入剩餘法力並額外減 1，且預備當回合不能打出、不能再次預備', () => {
     const g = newGame();
