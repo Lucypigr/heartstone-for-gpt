@@ -144,6 +144,24 @@ export const OVERRIDES: Record<string, Override> = {
     abilities: play({ e: 'damage', target: { t: 'all', filter: { type: 'minion', side: 'enemy' } }, amount: 2 }),
   },
 
+  JAIL_800: {
+    startOfGame: [fn('mugZeeStart')],
+    heroPower: {
+      id: 'JAIL_800hp1',
+      name: "Mug's Magic",
+      text: '被動：每回合第一個手下消耗減少(2)。（第3回合解鎖）',
+      cost: 0,
+      passive: true,
+    },
+    secondaryHeroPower: {
+      id: 'JAIL_800hp2',
+      name: "Zee's Might",
+      text: '被動：你每打出第5個手下，其戰吼觸發兩次。',
+      cost: 0,
+      passive: true,
+    },
+    tokens: ['JAIL_800hp1', 'JAIL_800hp2'],
+  },
   JAIL_802: {
     abilities: [{ on: { k: 'cardPlayed', side: 'friendly', cardType: 'MINION', hasBattlecry: true }, effects: [{ e: 'buff', target: { t: 'it' }, atk: 1, hp: 1 }] }],
   },
@@ -225,6 +243,7 @@ export const OVERRIDES: Record<string, Override> = {
   JAIL_474: { abilities: play(fn('jadeGuardians')) },
   JAIL_502: { abilities: [{ on: { k: 'turnStart', whose: 'mine' }, effects: [fn('alarmOMaticEnemy')] }] },
   JAIL_503: { costRule: { per: 'coinsInHand', amount: 1 }, abilities: dr({ e: 'draw', count: 1, who: 'self' }) },
+  JAIL_509: { startOfGame: [fn('godfreyStart')] },
   JAIL_510: { abilities: play(fn('annihilation')) },
   JAIL_515: { target: enemyMinion, abilities: play(fn('shadowRounds')) },
   JAIL_721: {
