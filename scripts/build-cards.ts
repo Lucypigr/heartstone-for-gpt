@@ -293,7 +293,11 @@ async function main() {
     if (r.tags.CASTS_WHEN_DRAWN) def.castsWhenDrawn = true;
     if (r.tags.STARSHIP) def.starship = true;
     if (r.tags.TERRAN) def.terran = true;
-    if (r.tags.PREPARE) def.prepare = true;
+    // PREPARE 標籤也會出現在「When you Prepare...」的關聯卡。
+    // 只有卡面本身以 Prepare 開頭，才代表這張牌能執行預備動作。
+    const printedEn = r.strs.CARDTEXT?.enUS ?? '';
+    const isPrepareCard = /^\s*(?:\[x\]\s*)?(?:<b>)?Prepare\b/i.test(printedEn.replace(/<\/b>/gi, ''));
+    if (r.tags.PREPARE && isPrepareCard) def.prepare = true;
     // 死亡騎士的符文需求
     if (r.tags.COST_BLOOD || r.tags.COST_FROST || r.tags.COST_UNHOLY) {
       def.runes = {};
@@ -369,8 +373,14 @@ async function main() {
       } else {
         const rawText = r.strs.CARDTEXT?.enUS ?? '';
         let stageText = r.tags.CORRUPT ? rawText.replace(/<b>Corrupt(?: Again)?:<\/b>[\s\S]*$/i, '').trim() : rawText;
-        // Prepare 是手牌替代動作，不是出牌效果；交由引擎處理，文字解析時只移除關鍵字標記。
-        if (r.tags.PREPARE) stageText = stageText.replace(/^<b>Prepare<\/b>[\s.:,-]*/i, '').replace(/^Prepare[\s.:,-]*/i, '').trim();
+        // Prepare 是手牌替代動作，不是出牌效果；交由引擎處理。
+        // CardDefs 有 [x]、<b>Prepare</b>、<b>Prepare:</b> 等不同標記形狀。
+        if (def.prepare) {
+          stageText = stageText
+            .replace(/^\s*(?:\[x\]\s*)?<b>Prepare:?<\/b>[\s.:,;-]*/i, '')
+            .replace(/^\s*(?:\[x\]\s*)?Prepare:?\s*[,.;-]?\s*/i, '')
+            .trim();
+        }
         parsed = parseCardText({ textEn: stageText, cardType: type }, makeEnv(r.id));
       }
     } catch (e) {
