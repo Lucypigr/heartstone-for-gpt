@@ -300,6 +300,66 @@ describe('2026：紫羅蘭堡批次復原（一）', () => {
   });
 });
 
+describe('2026：紫羅蘭堡剩餘通用機制', () => {
+  it('Violet Punisher 偷走可偷關鍵字，並每個獲得 +1/+1', () => {
+    const g = newGame();
+    const enemy = put(g, 'CS2_182', 1);
+    enemy.keywords.push('TAUNT','RUSH','LIFESTEAL');
+    const uid = give(g, 'JAIL_101');
+    g.s.players[0].mana = 10;
+    expect(g.apply({ type: 'play', handUid: uid, target: enemy.uid, position: 0 })).toBe(true);
+    const self = g.s.players[0].board.find((m) => m.cardId === 'JAIL_101')!;
+    expect(self.keywords).toEqual(expect.arrayContaining(['TAUNT','RUSH','LIFESTEAL']));
+    expect(enemy.keywords).not.toEqual(expect.arrayContaining(['TAUNT','RUSH','LIFESTEAL']));
+    expect(self.atkBuff).toBeGreaterThanOrEqual(3);
+  });
+
+  it('Reinforcement Aura 在三個自己的回合結束時各號召一次', () => {
+    const g = newGame();
+    const p = g.s.players[0];
+    p.deck = [g.newHandCard('CS2_182'), g.newHandCard('CS2_231'), g.newHandCard('CS2_172')];
+    p.hand = [];
+    p.mana = 10;
+    play(g, 'JAIL_327');
+    for (let i = 0; i < 3; i++) {
+      g.apply({ type: 'endTurn' });
+      g.apply({ type: 'endTurn' });
+    }
+    expect(p.objectives?.length ?? 0).toBe(0);
+    expect(p.board.length).toBe(3);
+  });
+
+  it('Dalaran Champion 每次獲得正向屬性時再額外 +1/+1', () => {
+    const g = newGame();
+    const m = put(g, 'JAIL_330', 0);
+    const beforeAtk = g.atkOf(m);
+    const beforeHp = m.hp;
+    // 直接用遊戲內既有 buff 法術測試。
+    const uid = give(g, 'CS2_087');
+    g.s.players[0].mana = 10;
+    expect(g.apply({ type: 'play', handUid: uid, target: m.uid })).toBe(true);
+    expect(g.atkOf(m)).toBeGreaterThanOrEqual(beforeAtk + 2);
+    expect(m.hp).toBeGreaterThanOrEqual(beforeHp + 2);
+  });
+
+  it('Picklock 的費用與手牌屬性等於剩餘法力，打出後鎖定並用該值造成傷害', () => {
+    const g = newGame();
+    const p = g.s.players[0];
+    const foe = g.s.players[1];
+    p.mana = 6;
+    const uid = give(g, 'JAIL_501');
+    const hc = p.hand.find((h) => h.uid === uid)!;
+    expect(g.costOf(p, hc)).toBe(6);
+    expect(g.handStats(0, hc)).toMatchObject({ atk: 6, hp: 6 });
+    const before = foe.hero.hp;
+    expect(g.apply({ type: 'play', handUid: uid, target: foe.hero.uid, position: 0 })).toBe(true);
+    const m = p.board.find((x) => x.cardId === 'JAIL_501')!;
+    expect(m.baseAtk).toBe(6);
+    expect(m.baseHp).toBe(6);
+    expect(foe.hero.hp).toBe(before - 6);
+  });
+});
+
 describe('2026：紫羅蘭堡薩滿法術變形', () => {
   it('Molten Gold / Frostshatter / Stormfury 各自在手牌看到 3 次施法後變形成元素', () => {
     const g = newGame();
