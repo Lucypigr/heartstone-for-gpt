@@ -372,7 +372,7 @@ describe('2026：Godfrey 與 Mug\'Zee 開局規則', () => {
   });
 
   it('Mug\'Zee 同時滿足條件時取得兩個被動；Mug 第3個自己的回合起第一個手下 -2', () => {
-    const deck = ['JAIL_800', ...Array(29).fill('GAME_005')];
+    const deck = ['JAIL_800', ...Array(29).fill('CS2_106')];
     const g = newGame({ deck });
     const p = g.s.players[0];
     expect(p.heroPower.id).toBe('JAIL_800hp1');
