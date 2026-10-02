@@ -1134,6 +1134,11 @@ const INSTEAD = new WeakSet<Effect>();
 function parseActions(body: string, ctx: Ctx): Effect[] {
   const effects: Effect[] = [];
   let s = body.trim();
+
+  // 「..., twice」會把前面的整個動作執行兩次；隨機目標會在每次執行時重新決定。
+  const twice = /^(.*?)(?:,\s*)?twice$/i.exec(s);
+  if (twice) return [{ e: 'repeat', times: 2, effects: parseActions(twice[1], ctx) }];
+
   const fe = /^For each (enemy minion|friendly minion|other friendly minion|card in your hand), (.+)$/.exec(s);
   if (fe) {
     const map: Record<string, DynAmount> = {
