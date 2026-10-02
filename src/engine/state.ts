@@ -40,6 +40,11 @@ export interface HandCard {
   chooseOneCombined?: boolean;
   /** Breakout Architect：這張法術打出時效果會施放兩次 */
   castTwice?: boolean;
+  /** SI:7：這張牌在手中時曾有友方潛行手下攻擊 */
+  stealthAttackSeen?: boolean;
+  /** Follow：本回合附加在此牌上的出牌效果 */
+  grantedPlayEffects?: Effect[];
+  grantedPlayEffectsTurn?: number;
 }
 
 export interface Minion {
