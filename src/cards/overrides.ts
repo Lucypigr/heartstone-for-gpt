@@ -66,6 +66,56 @@ export const OVERRIDES: Record<string, Override> = {
     tokens: ['GAME_005'],
   },
   JAIL_EVENT_102: { abilities: play(fn('desperateBribe')) },
+
+  // 紫羅蘭堡：第一批共用條件/效果復原
+  JAIL_035: {
+    abilities: [{ on: { k: 'play' }, cond: { c: 'deckNoNeutral' }, effects: [{ e: 'summonCopy', target: { t: 'self' }, count: 2 }] }],
+  },
+  JAIL_118: { abilities: play(fn('destroyNonClassMinions', { class: 'PALADIN' })) },
+  JAIL_123: {
+    abilities: play({ e: 'discover', pool: { type: 'SPELL', minCost: 5 }, then: [fn('markItCastTwice')] }),
+  },
+  JAIL_202: { auras: [{ scope: 'friendlyHero', atk: 1 }] },
+  JAIL_204: { costIf: { cond: { c: 'noMinions' }, cost: 2 } },
+  JAIL_307: {
+    costIf: { cond: { c: 'deckSize', op: '>=', n: 25 }, cost: 3 },
+    abilities: play({ e: 'repeat', times: 2, effects: [{ e: 'damage', target: { t: 'all', filter: { type: 'minion', side: 'any' } }, amount: 2, spell: true }] }),
+  },
+  JAIL_311: { atkIf: { cond: { c: 'deckSize', op: '>=', n: 25 }, amount: 5 } },
+  JAIL_329: {
+    abilities: heroAttacked({ e: 'buff', target: { t: 'all', filter: { type: 'minion', side: 'friendly', cardClass: 'PALADIN' } }, atk: 2, hp: 2 }),
+  },
+  JAIL_377: {
+    abilities: play(
+      { e: 'draw', count: 1, who: 'self' },
+      { e: 'cond', cond: { c: 'itCostMax', n: 2 }, then: [{ e: 'draw', count: 1, who: 'self' }] },
+    ),
+  },
+  JAIL_387: { abilities: play(fn('releaseTheBeasts')) },
+  JAIL_395: { target: friendlyMinion, abilities: play(fn('triggerChosenDeathrattle')) },
+  JAIL_455: {
+    abilities: play({ e: 'repeat', times: 2, effects: [{ e: 'damage', target: { t: 'all', filter: { type: 'minion', side: 'friendly', excludeSelf: true } }, amount: 1 }] }),
+  },
+  JAIL_461: { abilities: play(fn('destroyRandomAdjacent')) },
+  JAIL_507: { abilities: play(fn('spitefulChef')) },
+  JAIL_516: { abilities: play({ e: 'recruit', count: 2, maxCost: 2, keywords: ['RUSH'] }) },
+  JAIL_735: {
+    abilities: play(
+      { e: 'summonRandom', pool: { type: 'MINION', cost: 8 }, count: 1, who: 'self' },
+      { e: 'cond', cond: { c: 'spellsThisTurnAtLeast', n: 3 }, then: [{ e: 'summonRandom', pool: { type: 'MINION', cost: 8 }, count: 1, who: 'self' }] },
+    ),
+  },
+  JAIL_802: {
+    abilities: [{ on: { k: 'cardPlayed', side: 'friendly', cardType: 'MINION', hasBattlecry: true }, effects: [{ e: 'buff', target: { t: 'it' }, atk: 1, hp: 1 }] }],
+  },
+  JAIL_880: {
+    abilities: [{ on: { k: 'cardPlayed', side: 'friendly', cardType: 'MINION', hasDeathrattle: true }, effects: [{ e: 'buff', target: { t: 'it' }, keywords: ['RUSH'] }] }],
+  },
+  JAIL_909: {
+    abilities: [{ on: { k: 'play' }, cond: { c: 'combo' }, effects: [{ e: 'buff', target: { t: 'self' }, atk: { dyn: 'cardsPlayedThisTurn', base: -1 }, hp: { dyn: 'cardsPlayedThisTurn', base: -1 } }] }],
+  },
+  JAIL_986: { abilities: play(fn('franticForger')) },
+  JAIL_706: { abilities: play(fn('thievesTools')) },
   // 動物夥伴：隨機召喚米莎、雷歐克或霍弗
   NEW1_031: {
     abilities: [{ on: { k: 'play' }, effects: [{ e: 'custom', fn: 'summonOneOf', args: { cards: ['NEW1_032', 'NEW1_033', 'NEW1_034'] } }] }],
