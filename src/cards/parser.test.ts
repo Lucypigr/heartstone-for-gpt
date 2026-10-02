@@ -86,7 +86,7 @@ describe('卡牌敘述解析', () => {
       pool: { type: 'MINION', cost: 2, keyword: 'TAUNT' },
     });
 
-    const deckSize = parse('If your deck has 25 or more cards, draw a card.');
+    const deckSize = parse('Battlecry: If your deck has 25 or more cards, draw a card.');
     expect(deckSize.abilities[0].effects[0]).toMatchObject({ e: 'cond', cond: { c: 'deckSize', op: '>=', n: 25 } });
 
     const noNeutral = parse('Battlecry: If your deck has no Neutral cards, draw a card.');
