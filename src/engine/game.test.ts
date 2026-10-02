@@ -114,6 +114,67 @@ describe('法術', () => {
   });
 });
 
+describe('2026：賄賂（Bribe）', () => {
+  it('Dark Bribe 抽 3 張並把其中 1 張交給對手', () => {
+    const g = newGame();
+    const p = g.s.players[0];
+    const foe = g.s.players[1];
+    p.deck = [g.newHandCard('CS2_182'), g.newHandCard('CS2_231'), g.newHandCard('CS2_029')];
+    p.hand = [];
+    const uid = give(g, 'JAIL_206');
+    const beforeFoe = foe.hand.length;
+    expect(g.apply({ type: 'play', handUid: uid })).toBe(true);
+    expect(g.s.pendingChoice?.options).toHaveLength(3);
+    expect(g.apply({ type: 'choose', index: 0 })).toBe(true);
+    expect(p.hand).toHaveLength(2);
+    expect(foe.hand).toHaveLength(beforeFoe + 1);
+  });
+
+  it('Noxious Bribe 給自己強化二選一、對手普通版本', () => {
+    const g = newGame();
+    const p = g.s.players[0];
+    const foe = g.s.players[1];
+    const uid = give(g, 'JAIL_861');
+    expect(g.apply({ type: 'play', handUid: uid })).toBe(true);
+    expect(g.s.pendingChoice?.options.length).toBeGreaterThan(0);
+    const chosenId = g.s.pendingChoice!.options[0];
+    expect(g.apply({ type: 'choose', index: 0 })).toBe(true);
+    const mine = p.hand.find((h) => h.cardId === chosenId);
+    const theirs = foe.hand.find((h) => h.cardId === chosenId);
+    expect(mine?.chooseOneCombined).toBe(true);
+    expect(theirs?.chooseOneCombined).not.toBe(true);
+  });
+
+  it('Deadly Bribe 摧毀手下並給對手幸運幣；連擊時自己也得到一張', () => {
+    const g = newGame();
+    const p = g.s.players[0];
+    const foe = g.s.players[1];
+    p.cardsPlayedThisTurn = 1;
+    const target = put(g, 'CS2_182', 1);
+    const uid = give(g, 'CATA_EVENT_402');
+    const foeCoins = foe.hand.filter((h) => h.cardId === 'GAME_005').length;
+    const myCoins = p.hand.filter((h) => h.cardId === 'GAME_005').length;
+    expect(g.apply({ type: 'play', handUid: uid, target: target.uid })).toBe(true);
+    expect(g.minion(target.uid)).toBeNull();
+    expect(foe.hand.filter((h) => h.cardId === 'GAME_005')).toHaveLength(foeCoins + 1);
+    expect(p.hand.filter((h) => h.cardId === 'GAME_005')).toHaveLength(myCoins + 1);
+  });
+
+  it('Desperate Bribe 為雙方召喚兩個 2 費手下，並只把自己的兩個進化成 3 費', () => {
+    const g = newGame();
+    const p = g.s.players[0];
+    const foe = g.s.players[1];
+    p.board = [];
+    foe.board = [];
+    const uid = give(g, 'JAIL_EVENT_102');
+    expect(g.apply({ type: 'play', handUid: uid })).toBe(true);
+    expect(p.board).toHaveLength(2);
+    expect(foe.board).toHaveLength(2);
+    expect(p.board.every((m) => getCard(m.cardId).cost === 3)).toBe(true);
+    expect(foe.board.every((m) => getCard(m.cardId).cost === 2)).toBe(true);
+  });
+});
+
 describe('2026：伊莉妲‧逐罪者（Void draw rule）', () => {
   it('戰吼把牌庫送入虛無但保留 1 張；下個自己的回合額外從虛無取得 2 張，仍正常抽牌', () => {
     const g = newGame();
