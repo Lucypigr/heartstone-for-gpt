@@ -139,6 +139,7 @@ export interface Pool {
   type?: CardType;
   race?: Race;
   cost?: number;
+  minCost?: number;
   maxCost?: number;
   rarity?: Rarity;
   /** 'own' = 你的職業；'opponent' = 對手職業；或指定職業 */
@@ -165,6 +166,8 @@ export type Condition =
   | { c: 'outcast' }
   | { c: 'heroAttacked' }
   | { c: 'handSize'; op: '>=' | '<='; n: number }
+  | { c: 'deckSize'; op: '>=' | '<='; n: number }
+  | { c: 'deckNoNeutral' }
   | { c: 'maxMana'; n: number }
   | { c: 'opponentTurn' }
   | { c: 'secret' }
@@ -338,7 +341,7 @@ export interface Aura {
    * friendlyHand：你手牌中的手下（例如「你手牌中的手下具有回音」）
    * firstSpellDiscount：你每回合的第一張法術消耗減少 cost
    */
-  scope: 'otherFriendly' | 'adjacent' | 'otherAll' | 'friendlyHero' | 'enemyMinions' | 'friendlyHand' | 'firstSpellDiscount';
+  scope: 'otherFriendly' | 'friendlyMinions' | 'adjacent' | 'otherAll' | 'friendlyHero' | 'enemyMinions' | 'friendlyHand' | 'firstSpellDiscount';
   cost?: number;
   race?: Race;
   atk?: number;
