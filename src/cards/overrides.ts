@@ -32,6 +32,22 @@ const dieAtEndOfTurn: Ability = { on: { k: 'turnEnd', whose: 'mine' }, effects: 
 const PLAGUES = ['TTN_450t', 'TTN_450t2', 'TTN_450t3'];
 
 export const OVERRIDES: Record<string, Override> = {
+  // 紫羅蘭堡最後特殊卡：對戰內規則
+  JAIL_430: {
+    startOfGame: [fn('azalinaStart')],
+    abilities: play(fn('drawUntilHandFull')),
+  },
+  JAIL_458: {
+    abilities: play(fn('tinyPalChooseAmmo')),
+    tokens: ['JAIL_458t1', 'JAIL_458t2', 'JAIL_458t3', 'JAIL_458t4'],
+  },
+  JAIL_458t1: { abilities: heroAttacked(fn('tinyPalAmmo', { kind: 'frost' })) },
+  JAIL_458t2: { abilities: heroAttacked(fn('tinyPalAmmo', { kind: 'fire' })) },
+  JAIL_458t3: { abilities: heroAttacked(fn('tinyPalAmmo', { kind: 'earth' })) },
+  JAIL_458t4: { abilities: heroAttacked(fn('tinyPalAmmo', { kind: 'air' })) },
+  JAIL_470: { abilities: play(fn('lotusTroublemaker')) },
+  JAIL_500: { abilities: play(fn('sliceAndDice')) },
+
   // 破鏈者霍格：開局時複製牌庫中所有「其他」傳說卡；官方規定在其他開局效果之後觸發。
   JAIL_384: {
     startOfGame: [{ e: 'custom', fn: 'duplicateOtherLegendariesInDeck' }],
