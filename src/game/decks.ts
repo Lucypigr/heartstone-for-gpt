@@ -14,6 +14,8 @@ export interface Deck {
   /** 不限職業：可以放入任何職業的卡 */
   freeform: boolean;
   cards: string[];
+  /** 紫羅蘭堡組牌副牌：key = 規則破壞者卡牌 ID */
+  sideboards?: Record<string, string[]>;
 }
 
 export function maxCopies(def: CardDef): number {
@@ -79,6 +81,26 @@ export function validateDeck(deck: Deck, owned?: Record<string, number>): DeckPr
     if (n > maxCopies(def)) errors.push(`【${def.name}】最多只能放 ${maxCopies(def)} 張`);
     if (!cardAllowed(def, deck.heroClass, deck.freeform)) errors.push(`【${def.name}】不屬於此職業`);
     if (owned && (owned[id] ?? 0) < n) errors.push(`你沒有足夠的【${def.name}】`);
+  }
+  if (deck.cards.includes('JAIL_397')) {
+    const picks = deck.sideboards?.JAIL_397 ?? [];
+    if (picks.length !== 1) errors.push('【Commander Beatrix】需要選擇 1 張聖騎士或中立的 2 費手下');
+    for (const id of picks) {
+      const c = getCard(id);
+      if (c.type !== 'MINION' || c.cost !== 2 || !cardAllowed(c, 'PALADIN', false)) errors.push('Beatrix 副牌只能是聖騎士或中立的 2 費手下');
+      if (deck.cards.includes(id)) errors.push('Beatrix 副牌手下不能同時放在主牌組');
+    }
+  }
+  if (deck.cards.includes('JAIL_831')) {
+    const picks = deck.sideboards?.JAIL_831 ?? [];
+    if (picks.length !== 3 || new Set(picks).size !== 3) errors.push('【King of the Underbelly】需要選擇 3 張不同的違禁野獸');
+    for (const id of picks) {
+      const c = getCard(id);
+      const classes = cardClasses(c);
+      if (c.type !== 'MINION' || !(c.races?.includes('BEAST') || c.races?.includes('ALL')) || classes.includes('HUNTER') || classes.includes('NEUTRAL')) {
+        errors.push('Underbelly 副牌只能選非獵人、非中立職業的野獸');
+      }
+    }
   }
   const runes = deckRunes(deck.cards);
   if (runeTotal(runes) > MAX_RUNES) {
