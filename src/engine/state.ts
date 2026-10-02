@@ -244,7 +244,7 @@ export interface GameState {
 }
 
 export type Action =
-  | { type: 'play'; handUid: number; target?: number; position?: number; option?: number }
+  | { type: 'play'; handUid: number; target?: number; position?: number; option?: number; side?: 'self' | 'opponent' }
   | { type: 'attack'; attacker: number; target: number }
   | { type: 'heroPower'; target?: number; option?: number }
   | { type: 'trade'; handUid: number }
