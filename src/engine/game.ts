@@ -224,6 +224,7 @@ export class Game {
         deck: o.decks[id].map((cardId) => ({ ...game.newHandCard(cardId), startedInDeck: true })),
         deckStartedNoSpells: o.decks[id].every((cardId) => getCard(cardId).type !== 'SPELL'),
         deckStartedNoMinions: o.decks[id].every((cardId) => getCard(cardId).type !== 'MINION'),
+        deckStartedNoOtherMinions: o.decks[id].every((cardId) => getCard(cardId).type !== 'MINION' || cardId === 'JAIL_800'),
         deckStartedAllCostMax3: o.decks[id].every((cardId) => getCard(cardId).cost <= 3),
         cardsPlayedForTwoMana: 0,
         hand: [],
@@ -555,6 +556,9 @@ export class Game {
         ? 1
         : (def.costIf && this.evalCond(def.costIf.cond, this.baseCtx(p.id)) ? def.costIf.cost : def.cost);
     let cost = base + hc.costMod - (hc.prepareDiscount ?? 0);
+    // Mug's Magic：第 3 個自己的回合起，每回合第一個手下 -2 費。
+    const hasMug = p.heroPower.id === 'JAIL_800hp1' || p.secondaryHeroPower?.id === 'JAIL_800hp1';
+    if (hasMug && (p.turnsStarted ?? 0) >= 3 && (p.minionsPlayedThisTurn ?? 0) === 0 && def.type === 'MINION') cost -= 2;
     // 每回合的第一張法術（例如薩塔隱蔽力場）
     if (def.type === 'SPELL' && !p.spellsThisTurn && p.id === this.s.current) {
       for (const m of p.board) {
@@ -700,7 +704,9 @@ export class Game {
   /** 玩家目前的英雄能力（打出英雄卡後會被換掉） */
   powerDef(p: PlayerState): HeroPowerSpec {
     if (p.heroPower.heroCard) {
-      const hp = getCard(p.heroPower.heroCard).heroPower;
+      const card = getCard(p.heroPower.heroCard);
+      if (card.secondaryHeroPower?.id === p.heroPower.id) return card.secondaryHeroPower;
+      const hp = card.heroPower;
       if (hp) return hp;
     }
     return HERO_POWERS[p.heroClass];
@@ -709,7 +715,8 @@ export class Game {
   /** 顯示用的英雄能力名稱與敘述 */
   powerInfo(p: PlayerState): { name: string; text: string; cost: number } {
     if (p.heroPower.heroCard) {
-      const hp = getCard(p.heroPower.heroCard).heroPower;
+      const card = getCard(p.heroPower.heroCard);
+      const hp = card.secondaryHeroPower?.id === p.heroPower.id ? card.secondaryHeroPower : card.heroPower;
       if (hp) return { name: hp.name, text: hp.text, cost: p.heroPower.cost };
     }
     const info = HEROES[p.heroClass].power;
@@ -739,6 +746,7 @@ export class Game {
     const p = this.me;
     if (p.heroPower.used || p.mana < p.heroPower.cost) return false;
     const def = this.powerDef(p);
+    if ((def as HeroPowerDef).passive) return false;
     if (def.needsBoardSpace && p.board.length >= MAX_BOARD) return false;
     if (!p.heroPower.heroCard && p.heroClass === 'SHAMAN' && BASIC_TOTEMS.every((t) => p.board.some((m) => m.cardId === t))) return false;
     if (def.chooseOne) {
@@ -778,6 +786,7 @@ export class Game {
     const inst = p.secondaryHeroPower;
     const def = this.secondaryPowerDef(p);
     if (!inst || !def || inst.used) return false;
+    if (def.passive) return false;
     const costKind = def.costKind ?? 'mana';
     if (costKind === 'corpses') {
       if ((p.corpses ?? 0) < inst.cost) return false;
@@ -971,6 +980,8 @@ export class Game {
     if (p.secondaryHeroPower) p.secondaryHeroPower.used = false;
     p.cardsPlayedThisTurn = 0;
     p.spellsThisTurn = 0;
+    p.minionsPlayedThisTurn = 0;
+    p.turnsStarted = (p.turnsStarted ?? 0) + 1;
     p.drawnThisTurn = 0;
     s.deathsThisTurn = 0;
     p.heroAttackedThisTurn = false;
@@ -1174,10 +1185,16 @@ export class Game {
       this.assemble(boardPlayer, m);
       this.fx({ kind: 'summon', uid: m.uid, cardId: m.cardId, player: boardOwner, played: true });
       if (def.races?.includes('ELEMENTAL')) boardPlayer.elementalThisTurn = true;
-      for (const ab of playAbilities) {
-        if (ab.cond && !this.evalCond(ab.cond, ctx)) continue;
-        yield* this.runEffects(ab.effects, ctx);
-        if (this.over) return;
+      p.minionsPlayedThisTurn = (p.minionsPlayedThisTurn ?? 0) + 1;
+      p.minionsPlayedThisGame = (p.minionsPlayedThisGame ?? 0) + 1;
+      const hasZee = p.heroPower.id === 'JAIL_800hp2' || p.secondaryHeroPower?.id === 'JAIL_800hp2';
+      const battlecryCasts = hasZee && p.minionsPlayedThisGame % 5 === 0 ? 2 : 1;
+      for (let repeat = 0; repeat < battlecryCasts; repeat++) {
+        for (const ab of playAbilities) {
+          if (ab.cond && !this.evalCond(ab.cond, ctx)) continue;
+          yield* this.runEffects(ab.effects, ctx);
+          if (this.over) return;
+        }
       }
       yield* this.emit({ k: 'summon', player: boardOwner, subject: m.uid, races: def.races });
       yield* this.emit({ k: 'cardPlayed', player: p.id, subject: m.uid, cardType: 'MINION', races: def.races, cardId: def.id, echo });
@@ -1239,6 +1256,7 @@ export class Game {
       yield* this.emit({ k: 'cardPlayed', player: p.id, cardType: 'WEAPON', cardId: def.id, echo });
     }
     if (this.powerDef(p).refresh === 'cardPlayed') p.heroPower.used = false;
+    this.returnGodfreyOverdraw(p);
   }
 
   /** 腐化手牌：比較雙方「目前費用」，並保留原手牌卡的費用/數值增益。 */
@@ -1631,6 +1649,10 @@ export class Game {
         this.log(p.id, `${p.name}的手牌已滿，${this.name(card.cardId)}被燒掉了`);
         this.fx({ kind: 'burn', cardId: card.cardId, player: p.id });
       }
+      if (p.godfreyOverdraw) {
+        card.costMod -= 1;
+        (p.overdrawReturn ??= []).push(card);
+      }
       return null;
     }
     card.enteredTurn = this.s.turn;
@@ -1647,6 +1669,17 @@ export class Game {
     p.hand.push(card);
     this.recombineShatter(p);
     return card;
+  }
+
+  /** Godfrey：在其他等待進手牌的效果處理完後，把爆掉的牌隨機返還。 */
+  private returnGodfreyOverdraw(p: PlayerState) {
+    while (p.hand.length < MAX_HAND && p.overdrawReturn?.length) {
+      const card = pick(this.s, p.overdrawReturn);
+      if (!card) break;
+      p.overdrawReturn.splice(p.overdrawReturn.indexOf(card), 1);
+      this.enterHandCard(p, card, false);
+      this.log(p.id, `${this.name(card.cardId)}從爆牌區返回手牌（-1 費）`);
+    }
   }
 
   /** 從伊莉妲的虛無區隨機取回卡牌；這是「取得」而非抽牌。 */
@@ -2972,6 +3005,7 @@ export class Game {
           this.recombineShatter(me);
           this.log(me.id, `${me.name}棄掉了${this.name(c.cardId)}`);
         }
+        this.returnGodfreyOverdraw(me);
         break;
       case 'destroyWeapon': {
         const p = who(e.who);
@@ -3831,6 +3865,19 @@ export class Game {
       case 'picklockDamage': {
         const self = ctx.sourceUid !== null ? this.minion(ctx.sourceUid) : null;
         if (self && ctx.chosen !== null) yield* this.damage(this.dmgSource(ctx), ctx.chosen, Math.max(1, self.baseAtk));
+        break;
+      }
+      case 'godfreyStart':
+        me.godfreyOverdraw = true;
+        break;
+      case 'mugZeeStart': {
+        const mug = !!me.deckStartedNoOtherMinions;
+        const zee = !!me.deckStartedNoSpells;
+        if (mug) me.heroPower = { id: 'JAIL_800hp1', used: false, cost: 0, heroCard: 'JAIL_800' };
+        if (zee) {
+          if (mug) me.secondaryHeroPower = { id: 'JAIL_800hp2', used: true, cost: 0, sourceCardId: 'JAIL_800' };
+          else me.heroPower = { id: 'JAIL_800hp2', used: false, cost: 0, heroCard: 'JAIL_800' };
+        }
         break;
       }
       case 'chefNethrekStart':
