@@ -217,6 +217,77 @@ export const OVERRIDES: Record<string, Override> = {
   JAIL_940: { abilities: play(fn('undeathSentence')) },
   JAIL_974: { abilities: dr(fn('capturedArchmage')) },
 
+  // 紫羅蘭堡：Void Soul / Tripwire / 衍生法術 / Dormant
+  JAIL_730: { abilities: heroAttacked({ e: 'addCard', card: 'JAIL_732', count: 1, who: 'self' }), tokens: ['JAIL_732'] },
+  JAIL_732: { abilities: play(fn('voidSoul')) },
+  JAIL_733: { keywords: ['TAUNT'], abilities: dr({ e: 'addCard', card: 'JAIL_732', count: 1, who: 'self' }), tokens: ['JAIL_732'] },
+  JAIL_891: { target: chosenMinion, abilities: play(fn('voidBlast')), tokens: ['JAIL_732'] },
+
+  JAIL_386: {
+    abilities: play({ e: 'armor', amount: 2, who: 'self' }, { e: 'shuffle', card: 'JAIL_386t', count: 5 }),
+    tokens: ['JAIL_386t'],
+  },
+  JAIL_386t: { castsWhenDrawn: true, abilities: play({ e: 'armor', amount: 2, who: 'self' }) },
+
+  JAIL_879: {
+    abilities: play(
+      { e: 'summonRandom', pool: { type: 'MINION', race: 'BEAST', cost: 5 }, count: 1, who: 'self' },
+      { e: 'shuffle', card: 'JAIL_879t', count: 2 },
+    ),
+    tokens: ['JAIL_879t'],
+  },
+  JAIL_879t: {
+    castsWhenDrawn: true,
+    abilities: play({ e: 'summonRandom', pool: { type: 'MINION', race: 'BEAST', cost: 5 }, count: 1, who: 'self' }),
+  },
+  JAIL_881: {
+    abilities: play(
+      { e: 'splitDamage', filter: { type: 'character', side: 'enemy' }, amount: 4, spell: true },
+      { e: 'shuffle', card: 'JAIL_881t', count: 2 },
+    ),
+    tokens: ['JAIL_881t'],
+  },
+  JAIL_881t: {
+    castsWhenDrawn: true,
+    abilities: play({ e: 'splitDamage', filter: { type: 'character', side: 'enemy' }, amount: 4, spell: true }),
+  },
+
+  JAIL_436: {
+    abilities: play(
+      { e: 'heroAttack', amount: 1 },
+      { e: 'armor', amount: 1, who: 'self' },
+      { e: 'addCard', card: 'JAIL_436t', count: 1, who: 'self' },
+    ),
+    tokens: ['JAIL_436t', 'JAIL_436t2'],
+  },
+  JAIL_436t: {
+    abilities: play(
+      { e: 'heroAttack', amount: 2 },
+      { e: 'armor', amount: 2, who: 'self' },
+      { e: 'addCard', card: 'JAIL_436t2', count: 1, who: 'self' },
+    ),
+    tokens: ['JAIL_436t2'],
+  },
+  JAIL_436t2: { abilities: play({ e: 'heroAttack', amount: 4 }, { e: 'armor', amount: 4, who: 'self' }) },
+
+  JAIL_447: { keywords: ['RUSH'], abilities: dr({ e: 'addCard', card: 'JAIL_447t', count: 1, who: 'self' }), tokens: ['JAIL_447t'] },
+  JAIL_447t: {
+    target: chosenMinion,
+    abilities: play({ e: 'buff', target: { t: 'chosen' }, atk: 4, hp: 4, keywords: ['RUSH'] }),
+  },
+
+  JAIL_941: {
+    target: anyChar,
+    abilities: play({ e: 'heal', target: { t: 'chosen' }, amount: 4 }, { e: 'addCard', card: 'JAIL_941t', count: 1, who: 'self' }),
+    tokens: ['JAIL_941t'],
+  },
+  JAIL_941t: { target: anyChar, abilities: play({ e: 'damage', target: { t: 'chosen' }, amount: 4, spell: true }) },
+
+  JAIL_850: {
+    abilities: [{ on: { k: 'cardPlayed', side: 'friendly', cardType: 'MINION' }, effects: [fn('wardenMaiev')] }],
+  },
+  JAIL_997: { target: chosenMinion, abilities: play(fn('demonicConfinement')) },
+
   // 動物夥伴：隨機召喚米莎、雷歐克或霍弗
   NEW1_031: {
     abilities: [{ on: { k: 'play' }, effects: [{ e: 'custom', fn: 'summonOneOf', args: { cards: ['NEW1_032', 'NEW1_033', 'NEW1_034'] } }] }],
