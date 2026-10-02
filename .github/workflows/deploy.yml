@@ -31,7 +31,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: corrupt-diagnostics
-          path: .cache/corrupt.json
+          path: |
+            .cache/corrupt.json
+            .cache/unsupported.txt
+            src/data/cards.json
       - run: npm test
       - run: npm run build
       - uses: actions/configure-pages@v5
