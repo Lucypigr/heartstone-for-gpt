@@ -1264,6 +1264,7 @@ const TRIGGERS: TriggerRule[] = [
   { re: /^Inspire: /, build: () => ({ on: { k: 'heroPower', side: 'friendly' } }) },
   { re: /^When this is launched, /, build: () => ({ on: { k: 'launch' } }) },
   { re: /^Overkill: /, build: () => ({ on: { k: 'overkill' } }) },
+  { re: /^Honorable Kill: /, build: () => ({ on: { k: 'honorableKill' } }) },
   { re: /^Frenzy: /, build: () => ({ on: { k: 'frenzy' }, once: true }) },
   { re: /^At the end of your turn, /, build: () => ({ on: { k: 'turnEnd', whose: 'mine' } }) },
   { re: /^At the end of your opponent's turn, /, build: () => ({ on: { k: 'turnEnd', whose: 'opp' } }) },

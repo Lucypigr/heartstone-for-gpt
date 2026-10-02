@@ -307,6 +307,8 @@ export type Trig =
   | { k: 'launch' }
   /** 滅殺：在你的回合，造成的傷害超過消滅一個手下所需 */
   | { k: 'overkill' }
+  /** 榮譽擊殺：在你的回合，造成恰好致死的傷害 */
+  | { k: 'honorableKill' }
   | { k: 'secret'; ev: SecretEvent };
 
 export type SecretEvent =
