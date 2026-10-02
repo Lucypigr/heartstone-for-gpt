@@ -118,6 +118,8 @@ export interface PlayerState {
   weapon: Weapon | null;
   /** heroCard：打出英雄卡後，英雄能力改用該卡附帶的能力 */
   heroPower: { id: string; used: boolean; cost: number; heroCard?: string };
+  /** 額外的第二英雄能力；sourceCardId 用來取得完整能力定義 */
+  secondaryHeroPower?: { id: string; used: boolean; cost: number; sourceCardId: string };
   /** 本場對戰中賦予手下的關鍵字（例如「你的元素具有生命竊取」） */
   grants: { keyword: Keyword; race?: Race }[];
   /** 本回合下一張牌的折扣 */
@@ -247,6 +249,7 @@ export type Action =
   | { type: 'play'; handUid: number; target?: number; position?: number; option?: number; side?: 'self' | 'opponent' }
   | { type: 'attack'; attacker: number; target: number }
   | { type: 'heroPower'; target?: number; option?: number }
+  | { type: 'secondaryHeroPower'; target?: number }
   | { type: 'trade'; handUid: number }
   /** 預備：花掉剩餘法力，讓這張牌永久減費並鎖到下回合 */
   | { type: 'prepare'; handUid: number }
