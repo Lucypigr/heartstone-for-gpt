@@ -165,6 +165,10 @@ export type Condition =
   | { c: 'outcast' }
   | { c: 'heroAttacked' }
   | { c: 'handSize'; op: '>=' | '<='; n: number }
+  | { c: 'deckSize'; op: '>=' | '<='; n: number }
+  | { c: 'deckNoNeutral' }
+  | { c: 'spellsThisTurn'; op: '>=' | '<='; n: number }
+  | { c: 'itKeyword'; keyword: Keyword }
   | { c: 'maxMana'; n: number }
   | { c: 'opponentTurn' }
   | { c: 'secret' }
