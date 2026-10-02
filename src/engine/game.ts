@@ -277,7 +277,7 @@ export class Game {
     this.steps = 0;
     switch (action.type) {
       case 'play':
-        this.drive(this.wrap(this.playCard(action.handUid, action.target, action.position, action.option)));
+        this.drive(this.wrap(this.playCard(action.handUid, action.target, action.position, action.option, action.side)));
         return true;
       case 'attack':
         this.drive(this.wrap(this.doAttack(action.attacker, action.target)));
@@ -314,9 +314,16 @@ export class Game {
       case 'play': {
         const r = this.canPlay(action.handUid, action.option);
         if (!r.ok) return r;
+        const hc = p.hand.find((h) => h.uid === action.handUid);
+        if (!hc) return { ok: false, reason: '找不到卡牌' };
+        const def = this.handDef(hc);
+        const side = action.side ?? 'friendly';
+        if (side === 'enemy' && (def.type !== 'MINION' || !def.disguised)) return { ok: false, reason: '這張手下不能打到對手場上' };
+        const boardOwner = side === 'enemy' ? opp(s.current) : s.current;
+        if (def.type === 'MINION' && s.players[boardOwner].board.length >= MAX_BOARD) return { ok: false, reason: side === 'enemy' ? '對手場上已滿' : '場上已滿' };
         const req = this.playTargetReq(action.handUid, action.option);
         if (req) {
-          const valid = this.validTargets(req, s.current, this.cardIsSpell(action.handUid));
+          const valid = this.validTargets(req, boardOwner, this.cardIsSpell(action.handUid));
           if (valid.length) {
             if (action.target === undefined || !valid.includes(action.target)) return { ok: false, reason: '請選擇目標' };
           } else if (!req.optional) return { ok: false, reason: '沒有可選擇的目標' };
@@ -569,7 +576,11 @@ export class Game {
       const kind = this.costKind(p, hc);
       return { ok: false, reason: kind === 'health' ? '生命值不足' : kind === 'corpses' ? '屍體不足' : '法力不足' };
     }
-    if (def.type === 'MINION' && p.board.length >= MAX_BOARD) return { ok: false, reason: '場上已滿' };
+    if (def.type === 'MINION') {
+      if (def.disguised) {
+        if (p.board.length >= MAX_BOARD && s.players[opp(p.id)].board.length >= MAX_BOARD) return { ok: false, reason: '雙方場上都已滿' };
+      } else if (p.board.length >= MAX_BOARD) return { ok: false, reason: '場上已滿' };
+    }
     if (def.secret) {
       if (p.secrets.some((x) => x.cardId === def.id)) return { ok: false, reason: '已有相同的奧秘' };
       if (p.secrets.length >= MAX_SECRETS) return { ok: false, reason: '奧秘已滿' };
