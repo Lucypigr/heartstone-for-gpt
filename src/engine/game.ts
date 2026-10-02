@@ -800,16 +800,16 @@ export class Game {
     if (s.phase !== 'mulligan') return false;
     const p = s.players[player];
     if (p.mulliganDone) return false;
-    // 先抽新牌取代，再把換掉的牌洗回牌庫（不會抽回同一張）
-    const back: HandCard[] = [];
-    p.hand = p.hand.map((h) => {
-      if (!replace.includes(h.uid)) return h;
+    // 先移除要換的牌，再把新牌加入手牌；碎裂牌也必須在起手換牌時正常分裂。
+    const back = p.hand.filter((h) => replace.includes(h.uid));
+    p.hand = p.hand.filter((h) => !replace.includes(h.uid));
+    for (const old of back) {
       const next = p.deck.pop();
-      if (!next) return h;
-      back.push(h);
-      return next;
-    });
-    for (const c of back) p.deck.splice(randomInt(s, p.deck.length + 1), 0, c);
+      if (next) this.enterHandCard(p, next, false);
+      else p.hand.push(old);
+    }
+    for (const card of back) p.deck.splice(randomInt(s, p.deck.length + 1), 0, card);
+    this.recombineShatter(p);
     p.mulliganDone = true;
     if (s.players[0].mulliganDone && s.players[1].mulliganDone) {
       const second = s.players[opp(s.first)];
@@ -877,6 +877,7 @@ export class Game {
     const p = s.players[pid];
     // 回音的複製與暫時的卡只能在本回合使用
     p.hand = p.hand.filter((h) => !h.echo && !h.temporary);
+    this.recombineShatter(p);
     yield* this.emit({ k: 'turnEnd', player: pid });
     // 回合結束時回到手牌的卡（例如屍淇淋）
     if (p.endOfTurnCards?.length) {
@@ -935,6 +936,7 @@ export class Game {
     if (p.nextCardCorpsesTurn === s.turn) p.nextCardCorpsesTurn = undefined;
     if (def.type === 'SPELL' && p.nextSpellDiscount?.turn === s.turn) p.nextSpellDiscount = undefined;
     p.hand.splice(idx, 1);
+    this.recombineShatter(p);
     // 回音：把一張複製加入手牌，回合結束時消失
     if (echo && p.hand.length < MAX_HAND) p.hand.push({ ...structuredClone(hc), uid: this.uid(), echo: true });
     // 雙生法術：把一張沒有雙生法術的複製加入手牌
@@ -1085,6 +1087,7 @@ export class Game {
     const p = this.me;
     const i = p.hand.findIndex((h) => h.uid === handUid);
     const [card] = p.hand.splice(i, 1);
+    this.recombineShatter(p);
     p.mana -= 1;
     // 洗回牌庫會清除「預備」附魔；其他永久 costMod / 手牌 buff 維持原有引擎規則。
     card.prepareDiscount = 0;
@@ -1344,12 +1347,73 @@ export class Game {
     c.frozenTurn = this.s.turn;
   }
 
+  /**
+   * 碎裂牌進入手牌：左半片放最左、右半片放最右。
+   * 10 張滿手時原卡直接燒掉；9 張時左半片佔第 10 格、右半片燒掉。
+   */
+  private enterHandCard(p: PlayerState, card: HandCard, showBurn = true): HandCard | null {
+    if (p.hand.length >= MAX_HAND) {
+      if (showBurn) {
+        this.log(p.id, `${p.name}的手牌已滿，${this.name(card.cardId)}被燒掉了`);
+        this.fx({ kind: 'burn', cardId: card.cardId, player: p.id });
+      }
+      return null;
+    }
+    const def = this.handDef(card);
+    if (def.shatter && !card.shatterCombined) {
+      const left: HandCard = { ...structuredClone(card), cardId: def.shatter.left, shatterCombined: undefined };
+      const right: HandCard = { ...structuredClone(card), uid: this.uid(), cardId: def.shatter.right, shatterCombined: undefined };
+      p.hand.unshift(left);
+      if (p.hand.length < MAX_HAND) p.hand.push(right);
+      else {
+        this.log(p.id, `${p.name}的手牌已滿，${this.name(right.cardId)}被燒掉了`);
+        this.fx({ kind: 'burn', cardId: right.cardId, player: p.id });
+      }
+      this.log(p.id, `${this.name(def.id)}碎裂成左右兩半`);
+      this.recombineShatter(p);
+      return p.hand.find((h) => h.uid === card.uid) ?? null;
+    }
+    p.hand.push(card);
+    this.recombineShatter(p);
+    return card;
+  }
+
+  /** 左、右碎裂半片相鄰時，立即重組成原卡；重組後不會再次碎裂。 */
+  private recombineShatter(p: PlayerState) {
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (let i = 0; i + 1 < p.hand.length; i++) {
+        const a = p.hand[i];
+        const b = p.hand[i + 1];
+        const ad = this.handDef(a).shatteredFrom;
+        const bd = this.handDef(b).shatteredFrom;
+        if (!ad || !bd || ad.root !== bd.root || ad.side !== 'left' || bd.side !== 'right') continue;
+        const merged: HandCard = {
+          ...structuredClone(a),
+          cardId: ad.root,
+          shatterCombined: true,
+          // 兩個半片在手牌期間各自獲得的附魔於重組時合併。
+          costMod: a.costMod + b.costMod,
+          atkBuff: a.atkBuff + b.atkBuff,
+          hpBuff: a.hpBuff + b.hpBuff,
+          prepareDiscount: (a.prepareDiscount ?? 0) + (b.prepareDiscount ?? 0),
+          prepared: !!a.prepared || !!b.prepared,
+          preparedTurn: Math.max(a.preparedTurn ?? 0, b.preparedTurn ?? 0) || undefined,
+        };
+        p.hand.splice(i, 2, merged);
+        this.log(p.id, `${this.name(ad.root)}的兩個碎裂半片重新組合`);
+        changed = true;
+        break;
+      }
+    }
+  }
+
   /** 開局發牌（不觸發事件） */
   drawRaw(p: PlayerState): HandCard | null {
-    const c = p.deck.pop();
-    if (!c) return null;
-    p.hand.push(c);
-    return c;
+    const card = p.deck.pop();
+    if (!card) return null;
+    return this.enterHandCard(p, card, false);
   }
 
   private *draw(p: PlayerState, count: number, pool?: Pool): Gen<HandCard[]> {
@@ -1379,16 +1443,12 @@ export class Game {
         if (!pool) i--;
         continue;
       }
-      if (p.hand.length >= MAX_HAND) {
-        this.log(p.id, `${p.name}的手牌已滿，${this.name(card.cardId)}被燒掉了`);
-        this.fx({ kind: 'burn', cardId: card.cardId, player: p.id });
-        continue;
-      }
-      p.hand.push(card);
-      drawn.push(card);
+      const entered = this.enterHandCard(p, card);
+      if (!entered) continue;
+      drawn.push(entered);
       p.drawnThisTurn++;
-      this.fx({ kind: 'draw', uid: card.uid, player: p.id });
-      yield* this.emit({ k: 'draw', player: p.id, subject: card.uid, subjectKind: 'hand' });
+      this.fx({ kind: 'draw', uid: entered.uid, player: p.id });
+      yield* this.emit({ k: 'draw', player: p.id, subject: entered.uid, subjectKind: 'hand' });
     }
     return drawn;
   }
@@ -1448,13 +1508,7 @@ export class Game {
   }
 
   private addToHand(p: PlayerState, cardId: string): HandCard | null {
-    if (p.hand.length >= MAX_HAND) {
-      this.fx({ kind: 'burn', cardId, player: p.id });
-      return null;
-    }
-    const hc = this.newHandCard(cardId);
-    p.hand.push(hc);
-    return hc;
+    return this.enterHandCard(p, this.newHandCard(cardId));
   }
 
   makeMinion(owner: PlayerId, cardId: string, hand?: HandCard): Minion {
@@ -2567,6 +2621,7 @@ export class Game {
         for (let i = 0; i < e.count && me.hand.length; i++) {
           const idx = randomInt(s, me.hand.length);
           const [c] = me.hand.splice(idx, 1);
+          this.recombineShatter(me);
           this.log(me.id, `${me.name}棄掉了${this.name(c.cardId)}`);
         }
         break;
@@ -2989,7 +3044,10 @@ export class Game {
         // 縫補者：消滅對手手牌、牌堆、戰場上各一個隨機手下
         const isMinion = (h: HandCard) => getCard(h.cardId).type === 'MINION';
         const inHand = pick(s, foe.hand.filter(isMinion));
-        if (inHand) foe.hand = foe.hand.filter((h) => h !== inHand);
+        if (inHand) {
+          foe.hand = foe.hand.filter((h) => h !== inHand);
+          this.recombineShatter(foe);
+        }
         const inDeck = pick(s, foe.deck.filter(isMinion));
         if (inDeck) foe.deck = foe.deck.filter((h) => h !== inDeck);
         const onBoard = pick(s, foe.board.filter((m) => this.alive(m)));
@@ -3167,7 +3225,7 @@ export class Game {
         const id = yield* this.choose(ctx, opts.map((h) => h.cardId), '從你的牌堆發現一張卡');
         const hc = opts.find((h) => h.cardId === id)!;
         me.deck = me.deck.filter((h) => h !== hc);
-        if (me.hand.length < MAX_HAND) me.hand.push(hc);
+        this.enterHandCard(me, hc);
         if (args.copyCorpses && this.spendCorpses(me, args.copyCorpses as number)) this.addToHand(me, id);
         if (args.frostFreeze && getCard(id).spellSchool === 'FROST') {
           const m = pick(s, foe.board.filter((x) => this.alive(x)));
@@ -3396,7 +3454,7 @@ export class Game {
           this.fx({ kind: 'burn', cardId: hc.cardId, player: me.id });
           break;
         }
-        me.hand.push(hc);
+        this.enterHandCard(me, hc);
         me.drawnThisTurn++;
         break;
       }
@@ -3416,6 +3474,7 @@ export class Game {
         );
         if (!hc || me.board.length >= MAX_BOARD) break;
         me.hand = me.hand.filter((h) => h !== hc);
+        this.recombineShatter(me);
         const m = this.makeMinion(me.id, hc.cardId, hc);
         me.board.push(m);
         this.recalcAuras();
@@ -3442,6 +3501,7 @@ export class Game {
         const i = yield { player: ctx.controller, kind: 'discover', options: options.map((h) => h.cardId), title: '選擇一張洗回對手的牌堆' };
         const hc = options[Math.max(0, Math.min(options.length - 1, i ?? 0))];
         foe.hand = foe.hand.filter((h) => h !== hc);
+        this.recombineShatter(foe);
         foe.deck.splice(randomInt(s, foe.deck.length + 1), 0, hc);
         break;
       }
@@ -3540,6 +3600,7 @@ export class Game {
         const hc = pick(s, foe.hand.filter((h) => this.costOf(foe, h) === low));
         if (!hc) break;
         foe.hand = foe.hand.filter((h) => h !== hc);
+        this.recombineShatter(foe);
         this.log(me.id, `摧毀了對手手牌中的${this.name(hc.cardId)}`);
         break;
       }
