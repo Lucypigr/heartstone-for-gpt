@@ -2255,6 +2255,19 @@ export class Game {
         return p.heroAttackedThisTurn;
       case 'handSize':
         return c.op === '>=' ? p.hand.length >= c.n : p.hand.length <= c.n;
+      case 'deckSize':
+        return c.op === '>=' ? p.deck.length >= c.n : p.deck.length <= c.n;
+      case 'deckNoNeutral':
+        return p.deck.every((h) => getCard(h.cardId).cardClass !== 'NEUTRAL');
+      case 'spellsThisTurn': {
+        const n = p.spellsThisTurn ?? 0;
+        return c.op === '>=' ? n >= c.n : n <= c.n;
+      }
+      case 'itKeyword': {
+        const uid = ctx.it?.kind === 'char' ? ctx.it.uid : ctx.chosen;
+        const ch = uid !== null && uid !== undefined ? this.char(uid) : null;
+        return !!ch && !isHero(ch) && this.hasKw(ch, c.keyword);
+      }
       case 'maxMana':
         return p.maxMana >= c.n;
       case 'opponentTurn':
