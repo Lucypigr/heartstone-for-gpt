@@ -32,6 +32,11 @@ const dieAtEndOfTurn: Ability = { on: { k: 'turnEnd', whose: 'mine' }, effects: 
 const PLAGUES = ['TTN_450t', 'TTN_450t2', 'TTN_450t3'];
 
 export const OVERRIDES: Record<string, Override> = {
+  // 破鏈者霍格：開局時複製牌庫中所有「其他」傳說卡；官方規定在其他開局效果之後觸發。
+  JAIL_384: {
+    startOfGame: [{ e: 'custom', fn: 'duplicateOtherLegendariesInDeck' }],
+    startOfGameLast: true,
+  },
   // 動物夥伴：隨機召喚米莎、雷歐克或霍弗
   NEW1_031: {
     abilities: [{ on: { k: 'play' }, effects: [{ e: 'custom', fn: 'summonOneOf', args: { cards: ['NEW1_032', 'NEW1_033', 'NEW1_034'] } }] }],
