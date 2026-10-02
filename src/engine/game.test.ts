@@ -159,6 +159,46 @@ describe('2026：預備（Prepare）', () => {
   });
 });
 
+describe('2026：偽裝（Disguised / Free placement）', () => {
+  it('可把偽裝手下打到對手場上，仍算由原玩家打出', () => {
+    const g = newGame();
+    const uid = give(g, 'CAP_004'); // Disguised Operator
+    const me = g.s.players[0];
+    const foe = g.s.players[1];
+    const beforePlayed = me.cardsPlayedThisTurn;
+
+    expect(g.canPlay(uid, undefined, 'opponent').ok).toBe(true);
+    expect(g.apply({ type: 'play', handUid: uid, side: 'opponent', position: 0 })).toBe(true);
+
+    expect(foe.board).toHaveLength(1);
+    expect(foe.board[0].cardId).toBe('CAP_004');
+    expect(foe.board[0].owner).toBe(1);
+    expect(me.cardsPlayedThisTurn).toBe(beforePlayed + 1);
+  });
+
+  it('一般手下不能打到對手場上；偽裝手下會分別檢查兩邊的場地上限', () => {
+    const g = newGame();
+    const normal = give(g, 'CS2_182');
+    expect(g.canPlay(normal, undefined, 'opponent').ok).toBe(false);
+
+    const disguised = give(g, 'CAP_004');
+    for (let i = 0; i < MAX_BOARD; i++) put(g, 'CS2_182', 1);
+    expect(g.canPlay(disguised, undefined, 'opponent').ok).toBe(false);
+    expect(g.canPlay(disguised).ok).toBe(true);
+  });
+
+  it('打到對手場上的偽裝手下，其死亡效果依目前控制者判定', () => {
+    const g = newGame();
+    const uid = give(g, 'CAP_004');
+    expect(g.apply({ type: 'play', handUid: uid, side: 'opponent' })).toBe(true);
+    const m = g.s.players[1].board[0];
+    const beforeDeck = g.s.players[0].deck.length;
+
+    play(g, 'CS2_029', m.uid); // 火球術擊殺；「你的對手抽 2 張」應讓原出牌者抽牌
+    expect(g.s.players[0].deck.length).toBe(beforeDeck - 2);
+  });
+});
+
 describe('2026：碎裂（Shatter）', () => {
   it('進入手牌時分裂到最左與最右，中間牌打出後自動重組', () => {
     const g = newGame();
