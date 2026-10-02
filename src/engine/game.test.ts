@@ -114,6 +114,60 @@ describe('法術', () => {
   });
 });
 
+describe('2026：伊莉妲‧逐罪者（Void draw rule）', () => {
+  it('戰吼把牌庫送入虛無但保留 1 張；下個自己的回合額外從虛無取得 2 張，仍正常抽牌', () => {
+    const g = newGame();
+    const p = g.s.players[0];
+    // 用固定牌庫避免手牌/牌庫太大，確認虛無與正常抽牌是兩套流程。
+    p.deck = [
+      g.newHandCard('CS2_182'),
+      g.newHandCard('CS2_231'),
+      g.newHandCard('CS2_029'),
+      g.newHandCard('EX1_015'),
+    ];
+    p.hand = [];
+    const uid = give(g, 'JAIL_719');
+    p.mana = 10;
+    expect(g.apply({ type: 'play', handUid: uid, position: 0 })).toBe(true);
+
+    expect(p.deck).toHaveLength(1);
+    expect(p.voidDeck).toHaveLength(3);
+
+    // 先走完對手回合，再回到自己：虛無 +2，正常牌庫 +1。
+    expect(g.apply({ type: 'endTurn' })).toBe(true);
+    expect(g.apply({ type: 'endTurn' })).toBe(true);
+
+    expect(p.voidDeck).toHaveLength(1);
+    expect(p.deck).toHaveLength(0);
+    expect(p.hand).toHaveLength(3);
+    expect(p.drawnThisTurn).toBe(1);
+    expect(p.fatigue).toBe(0);
+  });
+
+  it('虛無取牌耗盡後不會重複；牌庫空時正常抽牌仍會造成疲勞', () => {
+    const g = newGame();
+    const p = g.s.players[0];
+    p.deck = [g.newHandCard('CS2_182'), g.newHandCard('CS2_231'), g.newHandCard('CS2_029')];
+    p.hand = [];
+    const uid = give(g, 'JAIL_719');
+    p.mana = 10;
+    expect(g.apply({ type: 'play', handUid: uid, position: 0 })).toBe(true);
+
+    // 第一個自己的新回合：取回虛無 2 張 + 正常抽掉保留的 1 張。
+    g.apply({ type: 'endTurn' });
+    g.apply({ type: 'endTurn' });
+    expect(p.voidDeck).toHaveLength(0);
+    expect(p.deck).toHaveLength(0);
+    const before = p.hand.length;
+
+    // 第二個自己的新回合：虛無不再給牌，正常抽牌進入疲勞。
+    g.apply({ type: 'endTurn' });
+    g.apply({ type: 'endTurn' });
+    expect(p.hand).toHaveLength(before);
+    expect(p.fatigue).toBe(1);
+  });
+});
+
 describe('2026：第二英雄能力（血腥醫生薩蕾娜）', () => {
   it('戰吼解鎖吸血鬼之吻，消耗 3 屍體並賦予手下 +3 攻擊力，與原英雄能力獨立', () => {
     const g = newGame();
