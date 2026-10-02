@@ -1704,3 +1704,68 @@ describe('2026：紫羅蘭堡批次復原（三）', () => {
     expect(p.mana10AfterTurns).toBeUndefined();
   });
 });
+
+
+describe('2026：紫羅蘭堡批次復原（四）', () => {
+  it('Void Soul 每次施放都提升之後召喚的惡魔費用', () => {
+    const g = newGame();
+    const p = g.s.players[0];
+    p.board = [];
+    play(g, 'JAIL_732');
+    expect(p.board).toHaveLength(1);
+    expect(getCard(p.board[0].cardId).cost).toBe(1);
+    p.mana = 10;
+    play(g, 'JAIL_732');
+    expect(p.board).toHaveLength(2);
+    expect(getCard(p.board[1].cardId).cost).toBe(2);
+    expect(p.voidSoulLevel).toBe(3);
+  });
+
+  it('Warden Maiev 讓之後打出的手下 +3/+3 並休眠 1 回合', () => {
+    const g = newGame();
+    const maiev = put(g, 'JAIL_850', 0);
+    expect(maiev).toBeTruthy();
+    const uid = give(g, 'CS2_182');
+    expect(g.apply({ type: 'play', handUid: uid })).toBe(true);
+    const yeti = g.s.players[0].board.find((m) => m.cardId === 'CS2_182')!;
+    expect(g.atkOf(yeti)).toBe(7);
+    expect(yeti.maxHp).toBe(8);
+    expect(yeti.dormantTurns).toBe(1);
+    expect(g.canAttack(yeti.uid)).toBe(false);
+
+    g.apply({ type: 'endTurn' });
+    g.apply({ type: 'endTurn' });
+    expect(yeti.dormantTurns).toBeUndefined();
+  });
+
+  it('Demonic Confinement：友方惡魔改為 +3/+3，其他手下休眠 2 回合', () => {
+    const g = newGame();
+    const enemy = put(g, 'CS2_182', 1);
+    play(g, 'JAIL_997', enemy.uid);
+    expect(enemy.dormantTurns).toBe(2);
+    expect(g.validTargets({ filter: { type: 'minion', side: 'enemy' } }, 0, true)).not.toContain(enemy.uid);
+  });
+
+  it('Scramble for Gear 洗入 5 張 Gear，抽到會施放並獲得護甲', () => {
+    const g = newGame();
+    const p = g.s.players[0];
+    p.deck = [];
+    p.hand = [];
+    p.hero.armor = 0;
+    play(g, 'JAIL_386');
+    expect(p.hero.armor).toBe(2);
+    expect(p.deck.filter((h) => h.cardId === 'JAIL_386t')).toHaveLength(5);
+  });
+
+  it('Widow 系列會 Bite → Feast → Banquet 逐步加入手牌', () => {
+    const g = newGame();
+    const p = g.s.players[0];
+    p.hand = [];
+    play(g, 'JAIL_436');
+    expect(p.hand.some((h) => h.cardId === 'JAIL_436t')).toBe(true);
+    const feast = p.hand.find((h) => h.cardId === 'JAIL_436t')!;
+    p.mana = 10;
+    expect(g.apply({ type: 'play', handUid: feast.uid })).toBe(true);
+    expect(p.hand.some((h) => h.cardId === 'JAIL_436t2')).toBe(true);
+  });
+});
