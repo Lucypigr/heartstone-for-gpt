@@ -127,6 +127,7 @@ interface AttackState {
 
 export interface NewGameOptions {
   decks: [string[], string[]];
+  sideboards?: [Record<string, string[]> | undefined, Record<string, string[]> | undefined];
   classes: [Exclude<CardClass, 'NEUTRAL'>, Exclude<CardClass, 'NEUTRAL'>];
   names: [string, string];
   ai: [boolean, boolean];
@@ -222,6 +223,7 @@ export class Game {
         overloadOwed: 0,
         overloadLocked: 0,
         deck: o.decks[id].map((cardId) => ({ ...game.newHandCard(cardId), startedInDeck: true })),
+        sideboards: structuredClone(o.sideboards?.[id] ?? {}),
         deckStartedNoSpells: o.decks[id].every((cardId) => getCard(cardId).type !== 'SPELL'),
         deckStartedNoMinions: o.decks[id].every((cardId) => getCard(cardId).type !== 'MINION'),
         deckStartedNoOtherMinions: o.decks[id].every((cardId) => getCard(cardId).type !== 'MINION' || cardId === 'JAIL_800'),
@@ -247,7 +249,9 @@ export class Game {
         ai: o.ai[id],
       };
     }
-    s.first = o.first ?? (nextRandom(s) < 0.5 ? 0 : 1);
+    const aya0 = o.decks[0].includes('JAIL_504');
+    const aya1 = o.decks[1].includes('JAIL_504');
+    s.first = aya0 !== aya1 ? (aya0 ? 1 : 0) : (o.first ?? (nextRandom(s) < 0.5 ? 0 : 1));
     s.current = s.first;
     // 開局效果必須在起手抽牌前執行；霍格等效果可修改牌庫內容。
     game.runStartOfGame();
@@ -456,6 +460,7 @@ export class Game {
     if (hc.starship) return starshipDef(hc.cardId, hc.starship);
     if (hc.parts) return zombeastDef(hc.parts);
     const base = getCard(hc.cardId);
+    if (hc.cardId === 'VH_SHAM_TRIAL' && hc.trialCost !== undefined) return { ...base, cost: hc.trialCost };
     if (!hc.chooseOneCombined || !base.chooseOne?.length) return base;
 
     // Noxious Bribe：把二選一的兩個選項合併成一張卡。
@@ -1835,7 +1840,8 @@ export class Game {
   }
 
   private addToHand(p: PlayerState, cardId: string): HandCard | null {
-    return this.enterHandCard(p, this.newHandCard(cardId));
+    const actual = cardId === 'GAME_005' && p.coinReplacement ? p.coinReplacement : cardId;
+    return this.enterHandCard(p, this.newHandCard(actual));
   }
 
   makeMinion(owner: PlayerId, cardId: string, hand?: HandCard): Minion {
@@ -3936,6 +3942,166 @@ export class Game {
       case 'picklockDamage': {
         const self = ctx.sourceUid !== null ? this.minion(ctx.sourceUid) : null;
         if (self && ctx.chosen !== null) yield* this.damage(this.dmgSource(ctx), ctx.chosen, Math.max(1, self.baseAtk));
+        break;
+      }
+      case 'beatrixStart': {
+        const configured = me.sideboards?.JAIL_397?.[0];
+        const legal = poolCards({ type: 'MINION', cost: 2 }, 'PALADIN', foe.heroClass)
+          .filter((d) => cardClasses(d).includes('PALADIN') || cardClasses(d).includes('NEUTRAL'));
+        const pickId = configured && legal.some((d) => d.id === configured) ? configured : pick(s, legal)?.id;
+        if (pickId) {
+          for (let i = 0; i < 10; i++) {
+            const h = this.newHandCard(pickId);
+            h.startedInDeck = false;
+            me.deck.push(h);
+          }
+          this.log(me.id, `Commander Beatrix 將10張${this.name(pickId)}加入牌庫`);
+        }
+        break;
+      }
+      case 'kingUnderbelly': {
+        const valid = (me.sideboards?.JAIL_831 ?? []).filter((id) => {
+          if (!hasCard(id)) return false;
+          const d = getCard(id);
+          const cls = cardClasses(d);
+          return d.type === 'MINION' && !!(d.races?.includes('BEAST') || d.races?.includes('ALL')) && !cls.includes('HUNTER') && !cls.includes('NEUTRAL');
+        });
+        const fallback = shuffle(
+          s,
+          poolCards({ type: 'MINION', race: 'BEAST', otherClass: true }, me.heroClass, foe.heroClass),
+        ).slice(0, 3).map((d) => d.id);
+        const options = [...new Set(valid.length ? valid : fallback)].slice(0, 3);
+        if (!options.length) break;
+        const chosen = yield* this.choose(ctx, options, '選擇一張違禁野獸');
+        const h = this.addToHand(me, chosen);
+        if (h) h.costMod -= 3;
+        break;
+      }
+      case 'ayaCounterfeit': {
+        const options = ['JAIL_504t', 'JAIL_504t2', 'JAIL_504t3'];
+        const chosen = yield* this.choose(ctx, options, '選擇強化假幣');
+        me.coinReplacement = chosen;
+        for (const zone of [me.hand, me.deck]) {
+          for (const h of zone) if (h.cardId === 'GAME_005') h.cardId = chosen;
+        }
+        for (let i = 0; i < 3; i++) this.addToHand(me, chosen);
+        break;
+      }
+      case 'grimyCoin': {
+        const enemies = foe.board.filter((m) => this.alive(m));
+        const victim = pick(s, enemies);
+        if (victim) yield* this.damage(this.dmgSource(ctx), victim.uid, 2);
+        break;
+      }
+      case 'kabalCoinPotion': {
+        const h = this.addToHand(me, 'JAIL_504t3p');
+        if (h) {
+          const pool = ['potion_aoe','potion_health','potion_damage','potion_armor','potion_freeze','potion_resurrect','potion_draw','potion_demon22','potion_addDemon'];
+          h.trialEffects = shuffle(s, pool).slice(0, 2);
+        }
+        break;
+      }
+      case 'randomKazakusPotion1': {
+        for (const effect of ctx.sourceHandCard?.trialEffects ?? []) {
+          if (effect === 'potion_aoe') {
+            for (const m of [...me.board, ...foe.board]) if (this.alive(m)) yield* this.damage(this.dmgSource(ctx), m.uid, 2);
+          } else if (effect === 'potion_health') {
+            for (const m of me.board) { m.maxHp += 2; m.hp += 2; }
+          } else if (effect === 'potion_damage') {
+            const target = pick(s, this.chars().filter((x) => this.alive(x) && x.owner !== ctx.controller));
+            if (target) yield* this.damage(this.dmgSource(ctx), target.uid, 3);
+          } else if (effect === 'potion_armor') me.hero.armor += 4;
+          else if (effect === 'potion_freeze') {
+            const target = pick(s, this.chars().filter((x) => this.alive(x) && x.owner !== ctx.controller));
+            if (target) this.freeze(target);
+          } else if (effect === 'potion_resurrect') {
+            const id = pick(s, me.graveyard);
+            if (id) yield* this.summon(ctx.controller, id);
+          } else if (effect === 'potion_draw') yield* this.draw(me, 1);
+          else if (effect === 'potion_demon22') {
+            const demon = pick(s, this.randomPool({ type: 'MINION', race: 'DEMON', cost: 2 }, ctx.controller, false));
+            if (demon) {
+              const m = yield* this.summon(ctx.controller, demon.id);
+              if (m) { m.baseAtk = 2; m.baseHp = 2; m.maxHp = 2 + m.auraHp; m.hp = m.maxHp; }
+            }
+          } else if (effect === 'potion_addDemon') {
+            const demon = pick(s, this.randomPool({ type: 'MINION', race: 'DEMON' }, ctx.controller, false));
+            if (demon) this.addToHand(me, demon.id);
+          }
+        }
+        break;
+      }
+      case 'godfatherKazakus': {
+        const effects = [
+          ['VH_TRIAL_TYRANNY','tyranny'], ['VH_TRIAL_SUGGEST','suggest'], ['VH_TRIAL_CRATE','crate'],
+          ['VH_TRIAL_PERJURY','perjury'], ['VH_TRIAL_CONTRACT','contract'], ['VH_TRIAL_SHIV','shiv'],
+          ['VH_TRIAL_CONSPIRACY','conspiracy'], ['VH_TRIAL_SMUGGLING','smuggling'], ['VH_TRIAL_DESTRUCTION','destruction'],
+        ] as const;
+        const firstOpts = shuffle(s, [...effects]).slice(0, 3);
+        const firstId = yield* this.choose(ctx, firstOpts.map(([id]) => id), '選擇第一個審判效果');
+        const first = effects.find(([id]) => id === firstId)![1];
+        const secondOpts = shuffle(s, effects.filter(([, key]) => key !== first)).slice(0, 3);
+        const secondId = yield* this.choose(ctx, secondOpts.map(([id]) => id), '選擇第二個審判效果');
+        const second = effects.find(([id]) => id === secondId)![1];
+        const durationId = yield* this.choose(ctx, ['VH_TRIAL_RUSHED','VH_TRIAL_GRUELING','VH_TRIAL_UNENDING'], '選擇審判長度');
+        const h = this.addToHand(me, 'VH_SHAM_TRIAL');
+        if (h) {
+          h.trialEffects = [first, second];
+          if (durationId === 'VH_TRIAL_RUSHED') { h.trialCost = 7; h.trialDelay = 0; }
+          else if (durationId === 'VH_TRIAL_GRUELING') { h.trialCost = 4; h.trialDelay = 1; }
+          else { h.trialCost = 0; h.trialDelay = 4; }
+        }
+        break;
+      }
+      case 'resolveShamTrial': {
+        const effects = ctx.sourceHandCard?.trialEffects ?? [];
+        const delay = ctx.sourceHandCard?.trialDelay ?? 0;
+        if (delay > 0) (me.delayed ??= []).push({ turns: delay, effects: [fn('executeShamTrial', { effects })], sourceCardId: 'VH_SHAM_TRIAL' });
+        else yield* this.custom('executeShamTrial', { effects }, ctx);
+        break;
+      }
+      case 'executeShamTrial': {
+        const effects = Array.isArray(args.effects) ? args.effects.map(String) : [];
+        for (const effect of effects) {
+          if (effect === 'tyranny') {
+            if (hasCard('LOOT_368')) yield* this.summon(ctx.controller, 'LOOT_368');
+          } else if (effect === 'suggest') yield* this.heal(me.hero.uid, 12);
+          else if (effect === 'crate') yield* this.draw(me, 3);
+          else if (effect === 'perjury') {
+            for (const h of me.hand) if (getCard(h.cardId).type === 'MINION') h.costMod -= 2;
+          } else if (effect === 'contract') {
+            for (let i = 0; i < 3; i++) {
+              const d = pick(s, this.randomPool({ type: 'MINION', cost: 3 }, ctx.controller, false));
+              if (d) yield* this.summon(ctx.controller, d.id);
+            }
+          } else if (effect === 'shiv') {
+            for (const h of me.hand) if (getCard(h.cardId).type === 'MINION') { h.atkBuff += 3; h.hpBuff += 3; }
+            for (const m of me.board) { m.atkBuff += 3; m.maxHp += 3; m.hp += 3; }
+          } else if (effect === 'conspiracy') {
+            const target = pick(s, foe.board.filter((m) => this.alive(m)));
+            if (target && me.board.length < MAX_BOARD) {
+              foe.board = foe.board.filter((m) => m !== target);
+              target.owner = me.id; target.sleeping = true; target.attacks = 0; me.board.push(target); this.recalcAuras();
+            }
+          } else if (effect === 'smuggling') {
+            for (let i = 0; i < 2 && foe.hand.length; i++) {
+              const target = pick(s, foe.hand);
+              if (!target) break;
+              foe.hand.splice(foe.hand.indexOf(target), 1);
+              target.copiedFromOpponent = true;
+              this.enterHandCard(me, target);
+            }
+          } else if (effect === 'destruction') {
+            const snapshot = shuffle(s, [...me.board, ...foe.board]);
+            for (const m of snapshot) {
+              if (!this.minion(m.uid) || !this.alive(m)) continue;
+              const targets = [...me.board, ...foe.board].filter((x) => x.uid !== m.uid && this.alive(x));
+              const target = pick(s, targets);
+              if (target) yield* this.doAttack(m.uid, target.uid);
+              if (this.over) return;
+            }
+          }
+        }
         break;
       }
       case 'azalinaStart': {
