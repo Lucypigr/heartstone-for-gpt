@@ -159,6 +159,64 @@ export const OVERRIDES: Record<string, Override> = {
   },
   CAP_400t2t: { keywords: ['LIFESTEAL'], summonedWhenDrawnForOpponent: true },
 
+  // 紫羅蘭堡：第二批可直接掛在既有引擎上的特殊卡
+  CAP_800: { keywords: ['REBORN'], fullRebornEnchantments: true },
+  CAP_803: { keywords: ['REBORN'], abilities: dr(fn('lingeringSpirit')) },
+  CAP_804: { target: friendlyMinion, abilities: play(fn('specterSpecialist')) },
+
+  JAIL_029: {
+    abilities: [{ on: { k: 'damaged', subject: 'friendlyMinion' }, cond: { c: 'itAlive' }, effects: [{ e: 'buff', target: { t: 'it' }, atk: 1 }] }],
+  },
+  JAIL_030: {
+    keywords: ['STEALTH'],
+    abilities: [{ on: { k: 'attack', subject: 'self', after: true }, effects: [{ e: 'draw', count: 1, who: 'self' }, fn('escapeSelf')] }],
+  },
+  JAIL_122: { abilities: play(fn('grantSpellEchoSummon')) },
+  JAIL_225: { target: chosenMinion, abilities: play(fn('nab')) },
+  JAIL_321: {
+    abilities: [{ on: { k: 'play' }, cond: { c: 'spellsThisTurnAtLeast', n: 1 }, effects: [fn('castTwoMageSecrets')] }],
+  },
+  JAIL_326: { target: friendlyMinion, abilities: play(fn('judgment')) },
+  JAIL_379: { abilities: play(fn('spireSecurity')) },
+  JAIL_444: { abilities: play(fn('sawbones')) },
+  JAIL_448: { keywords: ['TAUNT'], abilities: dr(fn('karov')) },
+  JAIL_452: { abilities: play(fn('overloadController', { amount: 2 })) },
+  JAIL_453: { keywords: ['TAUNT'] },
+  JAIL_462: { abilities: play(fn('hogdriver')) },
+  JAIL_474: { abilities: play(fn('jadeGuardians')) },
+  JAIL_502: { abilities: [{ on: { k: 'turnStart', whose: 'mine' }, effects: [fn('alarmOMaticEnemy')] }] },
+  JAIL_503: { costRule: { per: 'coinsInHand', amount: 1 }, abilities: dr({ e: 'draw', count: 1, who: 'self' }) },
+  JAIL_510: { abilities: play(fn('annihilation')) },
+  JAIL_515: { target: enemyMinion, abilities: play(fn('shadowRounds')) },
+  JAIL_721: {
+    keywords: ['RUSH'],
+    abilities: [{ on: { k: 'summon', side: 'friendly', race: 'DEMON' }, effects: [fn('soulParasiteGainStats')] }],
+  },
+  JAIL_734: { keywords: ['TAUNT'], abilities: play(fn('hellraiser')) },
+  JAIL_806: { abilities: play(fn('hexmarshal')) },
+  JAIL_852: { abilities: play(fn('shuffleHandsTogether')) },
+  JAIL_860: { startOfGame: [fn('chefNethrekStart')] },
+  JAIL_875: { abilities: heroAttacked(fn('staffOfTrickery')) },
+  JAIL_876: {
+    target: friendlyMinion,
+    abilities: play({
+      e: 'buff',
+      target: { t: 'chosen' },
+      abilities: [{ on: { k: 'deathrattle' }, effects: [{ e: 'summonRandom', pool: { type: 'MINION', cost: 4 }, count: 2, who: 'self' }] }],
+    }),
+  },
+  JAIL_882: { abilities: [...play(fn('copyDeckSpells')), ...dr({ e: 'draw', count: 1, who: 'self' })] },
+  JAIL_892: {
+    target: anyChar,
+    abilities: [
+      ...play({ e: 'damage', target: { t: 'chosen' }, amount: 2, spell: true }, fn('shuffleRandomDHSpell')),
+      { on: { k: 'play' }, cond: { c: 'outcast' }, effects: [{ e: 'damage', target: { t: 'chosen' }, amount: 2, spell: true }, fn('shuffleRandomDHSpell')] },
+    ],
+  },
+  JAIL_906: { abilities: dr(fn('moragg')) },
+  JAIL_940: { abilities: play(fn('undeathSentence')) },
+  JAIL_974: { abilities: dr(fn('capturedArchmage')) },
+
   // 動物夥伴：隨機召喚米莎、雷歐克或霍弗
   NEW1_031: {
     abilities: [{ on: { k: 'play' }, effects: [{ e: 'custom', fn: 'summonOneOf', args: { cards: ['NEW1_032', 'NEW1_033', 'NEW1_034'] } }] }],
