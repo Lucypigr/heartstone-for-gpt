@@ -2668,12 +2668,47 @@ textarea {
   margin: 6px 0 0;
 }
 
-.trade-btn {
+.hand-action-buttons {
   position: absolute;
   left: 50%;
   bottom: calc(var(--cw) * 1.05);
   transform: translateX(-50%);
   z-index: 35;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.hand-action-buttons .trade-btn,
+.hand-action-buttons .prepare-btn {
+  position: static;
+  transform: none;
+}
+
+.prepare-btn {
+  border-color: #8f6cff;
+  box-shadow: 0 0 12px #7d55ff66;
+}
+
+.hand-slot.prepared-card .card {
+  filter: drop-shadow(0 0 8px #8f6cff);
+}
+
+.prepare-badge {
+  position: absolute;
+  right: 2px;
+  top: -8px;
+  z-index: 7;
+  padding: 2px 5px;
+  border-radius: 8px;
+  background: #5e3bbdcc;
+  border: 1px solid #ae92ff;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  pointer-events: none;
 }
 
 .turn-banner {

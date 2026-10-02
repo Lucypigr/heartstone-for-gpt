@@ -28,6 +28,12 @@ export interface HandCard {
   healthCostUntil?: number;
   /** 暫時的卡：回合結束時從手牌消失 */
   temporary?: boolean;
+  /** 預備：永久折扣（與其他 costMod 分開，方便洗回牌庫時重置） */
+  prepareDiscount?: number;
+  /** 已經預備過；同一張手牌實體只能預備一次 */
+  prepared?: boolean;
+  /** 預備發生的遊戲回合；同回合不能打出 */
+  preparedTurn?: number;
 }
 
 export interface Minion {
@@ -240,6 +246,8 @@ export type Action =
   | { type: 'attack'; attacker: number; target: number }
   | { type: 'heroPower'; target?: number; option?: number }
   | { type: 'trade'; handUid: number }
+  /** 預備：花掉剩餘法力，讓這張牌永久減費並鎖到下回合 */
+  | { type: 'prepare'; handUid: number }
   /** 發射星艦 */
   | { type: 'launch' }
   | { type: 'endTurn' }

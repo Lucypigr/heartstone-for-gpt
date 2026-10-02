@@ -288,6 +288,10 @@ export class Game {
       case 'trade':
         this.drive(this.wrap(this.trade(action.handUid)));
         return true;
+      case 'prepare':
+        this.prepare(action.handUid);
+        this.trimFx();
+        return true;
       case 'launch':
         this.drive(this.wrap(this.doLaunch()));
         return true;
@@ -342,6 +346,8 @@ export class Game {
         if (p.mana < 1 || !p.deck.length) return { ok: false, reason: '法力不足' };
         return { ok: true };
       }
+      case 'prepare':
+        return this.canPrepare(action.handUid);
       case 'launch':
         return this.canLaunch();
     }
@@ -496,7 +502,7 @@ export class Game {
 
   costOf(p: PlayerState, hc: HandCard): number {
     const def = this.handDef(hc);
-    let cost = (def.costIf && this.evalCond(def.costIf.cond, this.baseCtx(p.id)) ? def.costIf.cost : def.cost) + hc.costMod;
+    let cost = (def.costIf && this.evalCond(def.costIf.cond, this.baseCtx(p.id)) ? def.costIf.cost : def.cost) + hc.costMod - (hc.prepareDiscount ?? 0);
     // 每回合的第一張法術（例如薩塔隱蔽力場）
     if (def.type === 'SPELL' && !p.spellsThisTurn && p.id === this.s.current) {
       for (const m of p.board) {
@@ -558,6 +564,7 @@ export class Game {
     const hc = p.hand.find((h) => h.uid === handUid);
     if (!hc) return { ok: false, reason: '找不到卡牌' };
     const def = this.handDef(hc);
+    if (hc.preparedTurn === s.turn) return { ok: false, reason: '這張牌本回合剛完成預備，下回合才能打出' };
     if (!this.canAfford(p, hc)) {
       const kind = this.costKind(p, hc);
       return { ok: false, reason: kind === 'health' ? '生命值不足' : kind === 'corpses' ? '屍體不足' : '法力不足' };
@@ -1045,11 +1052,44 @@ export class Game {
     }
   }
 
+  /** 是否可以對這張手牌進行「預備」。 */
+  canPrepare(handUid: number): { ok: boolean; reason?: string } {
+    const p = this.me;
+    const hc = p.hand.find((h) => h.uid === handUid);
+    if (!hc) return { ok: false, reason: '找不到卡牌' };
+    const def = this.handDef(hc);
+    if (!def.prepare) return { ok: false, reason: '這張牌沒有預備' };
+    if (hc.prepared) return { ok: false, reason: '這張牌已經預備過' };
+    if (p.mana < 1) return { ok: false, reason: '至少需要 1 點剩餘法力才能預備' };
+    if (this.costOf(p, hc) <= 0) return { ok: false, reason: '這張牌已經是 0 費' };
+    return { ok: true };
+  }
+
+  /**
+   * 預備：投入剩餘法力，永久減少「投入量 + 1」。
+   * 投入量最多到能把目前費用降到 0 所需要的數量；不算出牌，並鎖到下回合。
+   */
+  private prepare(handUid: number) {
+    const p = this.me;
+    const hc = p.hand.find((h) => h.uid === handUid)!;
+    const currentCost = this.costOf(p, hc);
+    const spend = Math.min(p.mana, Math.max(1, currentCost - 1));
+    p.mana -= spend;
+    hc.prepareDiscount = (hc.prepareDiscount ?? 0) + spend + 1;
+    hc.prepared = true;
+    hc.preparedTurn = this.s.turn;
+    this.log(p.id, `${p.name}預備了${this.name(hc.cardId)}，消耗 ${spend} 點法力並降低 ${spend + 1} 點消耗`);
+  }
+
   private *trade(handUid: number): Gen {
     const p = this.me;
     const i = p.hand.findIndex((h) => h.uid === handUid);
     const [card] = p.hand.splice(i, 1);
     p.mana -= 1;
+    // 洗回牌庫會清除「預備」附魔；其他永久 costMod / 手牌 buff 維持原有引擎規則。
+    card.prepareDiscount = 0;
+    card.prepared = false;
+    card.preparedTurn = undefined;
     p.deck.splice(randomInt(this.s, p.deck.length + 1), 0, card);
     this.log(p.id, `${p.name}交易了一張牌`);
     yield* this.draw(p, 1);

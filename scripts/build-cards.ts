@@ -4,7 +4,7 @@
 // 只保留「效果能被引擎完整執行」的卡牌，並輸出繁體中文名稱 / 敘述。
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { loadCardDefsXml, parseCardDefs, type RawCard } from './carddefs';
-import { parseCardText, Unsupported, type ParseEnv, type ParsedCard, type TokenQuery } from '../src/cards/parser';
+import { normalizeText, parseCardText, Unsupported, type ParseEnv, type ParsedCard, type TokenQuery } from '../src/cards/parser';
 import type { CardClass, CardDef, CardType, ChooseOneOption, Keyword, Race, Rarity } from '../src/engine/types';
 import { OVERRIDES } from '../src/cards/overrides';
 
@@ -106,7 +106,6 @@ const UNSUPPORTED_TAGS = [
   'REWIND',
   'EMPOWER',
   'FINALE',
-  'PREPARE',
   'LIBRAM',
   'DISCOVER_STUDIES_VISUAL',
   'DECK_RULE_MOD_DECK_SIZE',
@@ -294,6 +293,10 @@ async function main() {
     if (r.tags.CASTS_WHEN_DRAWN) def.castsWhenDrawn = true;
     if (r.tags.STARSHIP) def.starship = true;
     if (r.tags.TERRAN) def.terran = true;
+    // 目前 CardDefs 對 Prepare 卡不會輸出 PREPARE entity tag，而是 DECK_ACTION_COST=1
+    // 搭配卡面開頭的 Prepare。這也能排除 Jailbird 這類只「關心 Prepare」但不能自己預備的牌。
+    const prepareText = normalizeText(r.strs.CARDTEXT?.enUS ?? '');
+    if ((r.tags.DECK_ACTION_COST || r.tags['1743']) && /^Prepare(?:\b|[,.])/i.test(prepareText)) def.prepare = true;
     // 死亡騎士的符文需求
     if (r.tags.COST_BLOOD || r.tags.COST_FROST || r.tags.COST_UNHOLY) {
       def.runes = {};
@@ -368,7 +371,13 @@ async function main() {
         for (const [tag, kw] of KEYWORD_TAGS) if (r.tags[tag]) parsed.keywords.push(kw);
       } else {
         const rawText = r.strs.CARDTEXT?.enUS ?? '';
-        const stageText = r.tags.CORRUPT ? rawText.replace(/<b>Corrupt(?: Again)?:<\/b>[\s\S]*$/i, '').trim() : rawText;
+        let stageText = r.tags.CORRUPT ? rawText.replace(/<b>Corrupt(?: Again)?:<\/b>[\s\S]*$/i, '').trim() : rawText;
+        // Prepare 是手牌替代動作，不是出牌效果；交由引擎處理。
+        // CardDefs 有 [x]、<b>Prepare</b>、<b>Prepare:</b> 等不同標記形狀。
+        if (def.prepare) {
+          // 先正規化再移除，避免 CardDefs 的粗體、換行、逗點等標記差異。
+          stageText = normalizeText(stageText).replace(/^Prepare(?:[,:.]\s*|\s+)/i, '').trim();
+        }
         parsed = parseCardText({ textEn: stageText, cardType: type }, makeEnv(r.id));
       }
     } catch (e) {
