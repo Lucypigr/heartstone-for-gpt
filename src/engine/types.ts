@@ -430,13 +430,15 @@ export interface CardDef {
   enrage?: { atk: number };
   /** 條件成立時的持續攻擊力加成（例如牌庫 25 張以上 +5 攻擊力） */
   atkIf?: { cond: Condition; amount: number };
+  /** 特殊重生：以完整生命與死亡前附魔重生（Sinful Steed） */
+  fullRebornEnchantments?: boolean;
   target?: TargetReq;
   chooseOne?: ChooseOneOption[];
   secret?: boolean;
   /** 條件成立時的消耗（例如「若你正在建造星艦，消耗為 (1)」） */
   costIf?: { cond: Condition; cost: number };
   /** 動態費用 */
-  costRule?: { per: DynAmount | 'otherCardsInHand' | 'minionsOnBoard'; amount: number; race?: Race };
+  costRule?: { per: DynAmount | 'otherCardsInHand' | 'minionsOnBoard' | 'coinsInHand'; amount: number; race?: Race };
   /** 英雄卡：獲得的護甲與新的英雄能力 */
   armor?: number;
   heroPower?: HeroPowerDef;
