@@ -539,6 +539,8 @@ async function main() {
   console.log('各系列支援數：', [...bySet.entries()].sort((a, b) => a[0] - b[0]).map(([s, v]) => `${s}:${v.ok}/${v.total}`).join(' '));
   console.log('主要不支援原因：');
   for (const [k, n] of [...reasons.entries()].sort((a, b) => b[1] - a[1]).slice(0, 25)) console.log(`  ${n}\t${k}`);
+  console.log('紫羅蘭堡待支援：');
+  for (const f of failures.filter((x) => x.set === 1988)) console.log(`  ${f.id}\t${f.name}\t${f.reason}`);
 }
 
 main().catch((e) => {
