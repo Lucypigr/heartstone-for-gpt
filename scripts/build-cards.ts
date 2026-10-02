@@ -296,6 +296,9 @@ async function main() {
     }
     const race = RACE_MAP[r.tags.CARDRACE];
     if (race) def.races = [race];
+    // 手動 override 也必須保留官方實體標籤上的基礎關鍵字。
+    const taggedKeywords = KEYWORD_TAGS.filter(([tag]) => !!r.tags[tag]).map(([, kw]) => kw);
+    if (taggedKeywords.length) def.keywords = taggedKeywords;
     const school = SCHOOL_MAP[r.tags.SPELL_SCHOOL];
     if (school) def.spellSchool = school;
     if (r.tags.MULTIPLE_CLASSES) {
