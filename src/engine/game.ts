@@ -2376,7 +2376,7 @@ export class Game {
       case 'itCostMax': {
         if (ctx.it?.kind !== 'hand') return false;
         const found = this.handCard(ctx.it.uid);
-        return !!found && this.costOf(this.s.players[found.player], found.card) <= c.n;
+        return !!found && this.costOf(found.owner, found.card) <= c.n;
       }
       case 'spellsThisTurnAtLeast':
         return (p.spellsThisTurn ?? 0) >= c.n;
