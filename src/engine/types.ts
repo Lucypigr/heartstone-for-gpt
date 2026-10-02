@@ -432,6 +432,8 @@ export interface CardDef {
   atkIf?: { cond: Condition; amount: number };
   /** 特殊重生：以完整生命與死亡前附魔重生（Sinful Steed） */
   fullRebornEnchantments?: boolean;
+  /** 紫羅蘭堡薩滿法術：在手牌中看見你施放指定數量法術後變形成對應元素手下 */
+  handTransformAfterSpells?: { count: number; into: string };
   target?: TargetReq;
   chooseOne?: ChooseOneOption[];
   secret?: boolean;
