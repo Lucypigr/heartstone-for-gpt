@@ -300,6 +300,61 @@ describe('2026：紫羅蘭堡批次復原（一）', () => {
   });
 });
 
+describe('2026：Skeleton Key / IMPFERNAL / Slime / Raith', () => {
+  it('Skeleton Key 提供三張法術與刷新選項', () => {
+    const g = newGame();
+    g.s.players[0].mana = 10;
+    const uid = give(g, 'JAIL_319');
+    expect(g.apply({ type: 'play', handUid: uid })).toBe(true);
+    expect(g.s.pendingChoice?.options).toHaveLength(4);
+    expect(g.s.pendingChoice?.options.at(-1)).toBe('VH_SKELETON_REFRESH');
+  });
+
+  it('Slime em 消滅雙方場面並給各自 Ectoplasm，施放後只重召原本自己的手下', () => {
+    const g = newGame();
+    const me = g.s.players[0];
+    const foe = g.s.players[1];
+    me.board = []; foe.board = [];
+    put(g, 'CS2_182', 0);
+    put(g, 'CS2_231', 1);
+    me.mana = 10;
+    play(g, 'CAP_805');
+    expect(me.board).toHaveLength(0);
+    expect(foe.board).toHaveLength(0);
+    const ecto = me.hand.find((h) => h.cardId === 'VH_ECTOPLASM')!;
+    expect(ecto.ectoplasmMinions).toEqual(['CS2_182']);
+    me.mana = 10;
+    expect(g.apply({ type: 'play', handUid: ecto.uid })).toBe(true);
+    expect(me.board.some((m) => m.cardId === 'CS2_182')).toBe(true);
+    expect(me.board.some((m) => m.cardId === 'CS2_231')).toBe(false);
+  });
+
+  it('Raith 只重召本場實際完成過 Reborn 的手下', () => {
+    const g = newGame();
+    const p = g.s.players[0];
+    p.rebornThisGame = ['CAP_802t', 'CAP_802t'];
+    p.board = [];
+    g.s.players[1].board = [];
+    p.mana = 10;
+    play(g, 'CAP_806');
+    expect(p.board.filter((m) => m.cardId === 'CAP_802t')).toHaveLength(2);
+  });
+
+  it('IMPFERNAL 被棄掉時也會對其他所有角色造成 3 傷害', () => {
+    const g = newGame();
+    const p = g.s.players[0];
+    p.hand = [g.newHandCard('JAIL_398')];
+    const before0 = p.hero.hp;
+    const before1 = g.s.players[1].hero.hp;
+    // 直接使用引擎既有 discard effect。
+    const ctx = (g as any).baseCtx(0);
+    const gen = (g as any).runEffects([{ e: 'discard', count: 1 }], ctx);
+    (g as any).drive((g as any).wrap(gen));
+    expect(p.hero.hp).toBe(before0 - 3);
+    expect(g.s.players[1].hero.hp).toBe(before1 - 3);
+  });
+});
+
 describe('2026：Godfrey 與 Mug\'Zee 開局規則', () => {
   it('Godfrey 讓爆掉的牌在之後有空位時返回並 -1 費', () => {
     const deck = ['JAIL_509', ...Array(29).fill('CS2_182')];
