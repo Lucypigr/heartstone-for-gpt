@@ -59,6 +59,8 @@ export interface HandCard {
   copiedFromOpponent?: boolean;
   /** 持有期間曾打出過對手卡牌的複製（Mind Sweeper / Unshackle Soul）。 */
   opponentCopyPlayedSeen?: boolean;
+  /** Slime 'em! 產生的 Ectoplasm：保留原施法者場上的手下名單。 */
+  ectoplasmMinions?: string[];
 }
 
 export interface Minion {
@@ -239,6 +241,8 @@ export interface PlayerState {
   drawnThisTurn: number;
   /** 本場對戰召喚過的各種族手下數量 */
   summonedRaces: Record<string, number>;
+  /** 本場真正完成過 Reborn 的友方手下；Raith Van Geist 使用。 */
+  rebornThisGame?: string[];
   /** 是否為電腦 */
   ai: boolean;
 }
