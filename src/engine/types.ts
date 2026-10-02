@@ -392,6 +392,8 @@ export interface HeroPowerDef extends HeroPowerSpec {
   cost: number;
   /** 預設使用法力；部分特殊英雄能力改用屍體 */
   costKind?: 'mana' | 'corpses';
+  /** 被動英雄能力，不可主動點擊 */
+  passive?: boolean;
 }
 
 /** 死亡騎士符文：一副套牌中三種符文各取最高需求，加總最多 3 個 */
