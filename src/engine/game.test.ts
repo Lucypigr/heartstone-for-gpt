@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { getCard } from '../cards/registry';
 import { Game } from './game';
-import type { Minion, PlayerId } from './state';
+import { MAX_BOARD, type Minion, type PlayerId } from './state';
 
 const FILLER = 'CS2_182'; // 冰風雪人
 
