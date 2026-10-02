@@ -922,8 +922,10 @@ textarea {
   border-color: #48ff6e;
 }
 
-.my-board.placing {
+.board.placing {
   cursor: copy;
+  outline: 2px dashed #7ee7ff99;
+  outline-offset: 4px;
 }
 
 .battle.placing-card {
