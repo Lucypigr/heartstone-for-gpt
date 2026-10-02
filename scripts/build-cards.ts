@@ -100,7 +100,6 @@ const UNSUPPORTED_TAGS = [
   'OBJECTIVE',
   'START_OF_GAME_KEYWORD',
   'IMBUE',
-  'DISGUISED',
   'KINDRED',
   'REWIND',
   'EMPOWER',
@@ -307,6 +306,7 @@ async function main() {
       if (classes.length) def.classes = classes;
     }
     if (r.tags.STARSHIP_PIECE) def.starshipPiece = true;
+    if (r.tags.DISGUISED) def.disguised = true;
     if (r.tags.CASTS_WHEN_DRAWN) def.castsWhenDrawn = true;
     if (r.tags.STARSHIP) def.starship = true;
     if (r.tags.TERRAN) def.terran = true;
@@ -398,6 +398,10 @@ async function main() {
         if (r.tags.SHATTER || r.tags.SHATTERED) {
           // Shatter / Shattered 描述的是手牌形態，不是施放效果。
           stageText = normalizeText(stageText).replace(/^Shatter(?:ed)?(?:[,:.]\s*|\s+)/i, '').trim();
+        }
+        if (r.tags.DISGUISED) {
+          // 「Can be played on either side.」是出牌規則，不是卡牌效果；由引擎處理。
+          stageText = normalizeText(stageText).replace(/^Can be played on either side(?:[.!]\s*|\s+)/i, '').trim();
         }
         parsed = parseCardText({ textEn: stageText, cardType: type }, makeEnv(r.id));
       }
