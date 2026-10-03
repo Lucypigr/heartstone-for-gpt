@@ -25,7 +25,7 @@ const CLASS_MAP: Record<number, CardClass> = {
   12: 'NEUTRAL',
   14: 'DEMONHUNTER',
 };
-const TYPE_MAP: Record<number, CardType> = { 4: 'MINION', 5: 'SPELL', 7: 'WEAPON' };
+const TYPE_MAP: Record<number, CardType> = { 4: 'MINION', 5: 'SPELL', 7: 'WEAPON', 39: 'LOCATION' };
 const RARITY_MAP: Record<number, Rarity> = { 1: 'COMMON', 2: 'FREE', 3: 'RARE', 4: 'EPIC', 5: 'LEGENDARY' };
 const RACE_MAP: Record<number, Race> = {
   2: 'DRAENEI',
@@ -229,7 +229,7 @@ async function main() {
   function buildDef(r: RawCard, collectible: boolean): CardDef | null {
     // 英雄卡只收錄有手動定義（overrides）的
     const type: CardType | undefined = typeOf(r) ?? (r.tags.CARDTYPE === 3 && collectible && OVERRIDES[r.id] ? 'HERO' : undefined);
-    if (!type) return null;
+    if (!type || (type === 'LOCATION' && !OVERRIDES[r.id])) return null;
     const cls = CLASS_MAP[r.tags.CLASS ?? 12] ?? (collectible ? undefined : 'NEUTRAL');
     if (!cls) return null;
     const nameZh = clean(r.strs.CARDNAME?.zhTW);
@@ -288,6 +288,7 @@ async function main() {
       }
     }
 
+    if (type === 'LOCATION') def.health = r.tags.HEALTH ?? 1;
     const flavor = clean(r.strs.FLAVORTEXT?.zhTW);
     if (flavor && collectible) def.flavor = flavor;
     if (type === 'MINION' || type === 'WEAPON') {
@@ -338,6 +339,9 @@ async function main() {
         if (!buildToken(t)) throw new Error(`覆寫 ${r.id} 引用的衍生卡 ${t} 無法建立`);
       }
       const out: CardDef = { ...def, ...rest, heroPower: undefined };
+      // 手動效果不應抹掉官方靜態關鍵字（例如戰吼卡仍有嘲諷）。
+      const keywords = [...new Set([...KEYWORD_TAGS.filter(([tag]) => r.tags[tag]).map(([, kw]) => kw), ...(rest.keywords ?? [])])];
+      if (keywords.length) out.keywords = keywords;
       if (type === 'HERO') {
         const bp = byId.get(r.refs.HERO_POWER);
         if (!bp || !heroPower) throw new Error(`英雄卡 ${r.id} 缺少英雄能力`);
@@ -440,6 +444,14 @@ async function main() {
     return def;
   }
 
+  // 不支援的牌型也要出現在缺漏報告，不能在計算官方系列總數前消失。
+  const violetOfficial = raws.filter((r) => r.tags.COLLECTIBLE && r.tags.CARD_SET === 1988);
+  for (const r of violetOfficial) {
+    if (!typeOf(r) && !(r.tags.CARDTYPE === 3 && OVERRIDES[r.id])) {
+      failures.push({ id: r.id, name: r.strs.CARDNAME.enUS, set: 1988, reason: `未支援卡牌類型 ${r.tags.CARDTYPE}${r.tags.CARDTYPE === 39 ? '（地標）' : ''}` });
+    }
+  }
+
   // ------------------------------------------------------------------ 可收藏卡
   const collectibles = raws.filter(
     (r) =>
@@ -536,7 +548,8 @@ async function main() {
     failures.map((f) => `${f.id}\t${f.set}\t${f.name}\t${f.reason}`).join('\n'),
   );
   console.log(`可收藏卡（去重後）：${groupsTotal}，已支援：${cards.length}，衍生卡：${tokens.length}`);
-  console.log('各系列支援數：', [...bySet.entries()].sort((a, b) => a[0] - b[0]).map(([s, v]) => `${s}:${v.ok}/${v.total}`).join(' '));
+  console.log(`紫羅蘭堡官方可收藏卡：${violetOfficial.length}，已收錄：${cards.filter((c) => c.set === 1988).length}`);
+  console.log('各系列已支援牌型收錄數：', [...bySet.entries()].sort((a, b) => a[0] - b[0]).map(([s, v]) => `${s}:${v.ok}/${v.total}`).join(' '));
   console.log('主要不支援原因：');
   for (const [k, n] of [...reasons.entries()].sort((a, b) => b[1] - a[1]).slice(0, 25)) console.log(`  ${n}\t${k}`);
   for (const dbf of [127012, 127024, 127063]) {

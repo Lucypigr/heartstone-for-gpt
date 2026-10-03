@@ -22,6 +22,7 @@ import {
   type HandCard,
   type Hero,
   type Minion,
+  type Location,
   type PlayerId,
   type PlayerState,
   type StarshipPiece,
@@ -293,6 +294,9 @@ export class Game {
       case 'play':
         this.drive(this.wrap(this.playCard(action.handUid, action.target, action.position, action.option, action.side)));
         return true;
+      case 'useLocation':
+        this.drive(this.wrap(this.useLocation(action.uid)));
+        return true;
       case 'attack':
         this.drive(this.wrap(this.doAttack(action.attacker, action.target)));
         return true;
@@ -319,6 +323,63 @@ export class Game {
     return false;
   }
 
+  /** 地標佔用場地格，但不屬於手下或可攻擊的角色。 */
+  boardSpaceUsed(pid: PlayerId): number {
+    const p = this.s.players[pid];
+    return p.board.length + (p.locations?.length ?? 0);
+  }
+
+  private addLocation(pid: PlayerId, cardId: string): Location | null {
+    if (this.boardSpaceUsed(pid) >= MAX_BOARD) return null;
+    const location: Location = { uid: this.uid(), owner: pid, cardId, durability: getCard(cardId).health ?? 1, cooldown: 0, playOrder: ++this.s.playCounter, discarded: [] };
+    (this.s.players[pid].locations ??= []).push(location);
+    return location;
+  }
+
+  canUseLocation(uid: number): { ok: boolean; reason?: string } {
+    if (this.s.phase !== 'play' || this.s.pendingChoice) return { ok: false, reason: '現在無法啟動地標' };
+    const p = this.me;
+    const location = p.locations?.find((l) => l.uid === uid);
+    if (!location || location.durability <= 0) return { ok: false, reason: '找不到自己的地標' };
+    if (location.cooldown > 0) return { ok: false, reason: '地標冷卻中' };
+    if (location.cardId === 'JAIL_887' && !p.hand.length) return { ok: false, reason: '需要一張手牌才能捨棄' };
+    return { ok: true };
+  }
+
+  private *useLocation(uid: number): Gen {
+    const p = this.me;
+    const location = p.locations!.find((l) => l.uid === uid)!;
+    location.cooldown = 2;
+    this.log(p.id, `啟動${this.name(location.cardId)}`);
+    const ctx = { ...this.baseCtx(p.id), sourceUid: location.uid, sourceCardId: location.cardId };
+    yield* this.runEffects(getCard(location.cardId).locationEffects ?? [], ctx);
+    location.durability--;
+    if (location.durability <= 0) {
+      p.locations = p.locations!.filter((l) => l.uid !== uid);
+      if (location.cardId === 'JAIL_887' && !this.over) {
+        const released = yield* this.summon(p.id, 'JAIL_887t2');
+        if (released) released.prisonCards = structuredClone(location.discarded);
+      }
+    }
+  }
+
+  private *replayPrisonCard(pid: PlayerId, original: HandCard): Gen {
+    const p = this.s.players[pid];
+    const card = { ...structuredClone(original), uid: this.uid(), locationLocked: false };
+    const def = this.handDef(card);
+    if ((def.type === 'MINION' || def.type === 'LOCATION') && this.boardSpaceUsed(pid) >= MAX_BOARD) return;
+    const option = def.chooseOne?.length ? randomInt(this.s, def.chooseOne.length) : undefined;
+    const req = option === undefined ? def.target : def.chooseOne![option].target;
+    const targets = req ? this.validTargets(req, pid, def.type === 'SPELL') : [];
+    if (req && !req.optional && !targets.length && def.type === 'SPELL') return;
+    // 不經 enterHandCard：免費重播不應因玩家手牌已滿而燒毀卡牌。
+    p.hand.push(card);
+    const auto = this.autoAll;
+    this.autoAll = true;
+    try { yield* this.playCard(card.uid, pick(this.s, targets), undefined, option, undefined, true); }
+    finally { this.autoAll = auto; }
+  }
+
   /** 檢查動作是否合法 */
   check(action: Action): { ok: boolean; reason?: string } {
     const s = this.s;
@@ -326,6 +387,8 @@ export class Game {
     if (s.pendingChoice) return { ok: false, reason: '請先做出選擇' };
     const p = s.players[s.current];
     switch (action.type) {
+      case 'useLocation':
+        return this.canUseLocation(action.uid);
       case 'endTurn':
         return { ok: true };
       case 'play': {
@@ -461,6 +524,7 @@ export class Game {
     if (hc.parts) return zombeastDef(hc.parts);
     const base = getCard(hc.cardId);
     if (hc.cardId === 'VH_SHAM_TRIAL' && hc.trialCost !== undefined) return { ...base, cost: hc.trialCost };
+    if (hc.cardId === 'JAIL_504t3p' && hc.trialEffects?.includes('potion_damage')) return { ...base, target: { filter: { type: 'character', side: 'any' } } };
     if (!hc.chooseOneCombined || !base.chooseOne?.length) return base;
 
     // Noxious Bribe：把二選一的兩個選項合併成一張卡。
@@ -506,7 +570,7 @@ export class Game {
     const def = this.handDef(hc);
     const bonus = isCthun(hc.cardId) ? this.s.players[pid].cthun : undefined;
     const extra = def.type === 'MINION' ? this.s.players[pid].minionAtkBonus ?? 0 : 0;
-    const mirrored = def.manaMirrorInHand ? (hc.lockedManaValue ?? Math.max(1, this.s.players[pid].mana)) : undefined;
+    const mirrored = def.manaMirrorInHand ? (hc.lockedManaValue ?? Math.max(0, this.s.players[pid].mana)) : undefined;
     return {
       atk: (mirrored ?? def.attack ?? 0) + hc.atkBuff + (bonus?.atk ?? 0) + extra,
       hp: (mirrored ?? def.health ?? 0) + hc.hpBuff + (bonus?.hp ?? 0),
@@ -557,7 +621,7 @@ export class Game {
   costOf(p: PlayerState, hc: HandCard): number {
     const def = this.handDef(hc);
     const base = def.manaMirrorInHand
-      ? (hc.lockedManaValue ?? Math.max(1, p.mana))
+      ? (hc.lockedManaValue ?? Math.max(0, p.mana))
       : hc.cardId === 'JAIL_433' && hc.opponentCopyPlayedSeen
         ? 1
         : (def.costIf && this.evalCond(def.costIf.cond, this.baseCtx(p.id)) ? def.costIf.cost : def.cost);
@@ -582,7 +646,7 @@ export class Game {
           n = this.s.players[0].board.length + this.s.players[1].board.length;
           break;
         case 'coinsInHand':
-          n = p.hand.filter((h) => h.cardId === 'GAME_005').length;
+          n = p.hand.filter((h) => this.isCoin(h.cardId)).length;
           break;
         default:
           n = this.dyn(def.costRule.per, this.baseCtx(p.id), def.costRule.race);
@@ -634,18 +698,19 @@ export class Game {
     const hc = p.hand.find((h) => h.uid === handUid);
     if (!hc) return { ok: false, reason: '找不到卡牌' };
     const def = this.handDef(hc);
+    if (hc.locationLocked) return { ok: false, reason: '此牌被鎖定，請先打出另一張牌' };
     if (hc.preparedTurn === s.turn) return { ok: false, reason: '這張牌本回合剛完成預備，下回合才能打出' };
     if (!this.canAfford(p, hc)) {
       const kind = this.costKind(p, hc);
       return { ok: false, reason: kind === 'health' ? '生命值不足' : kind === 'corpses' ? '屍體不足' : '法力不足' };
     }
-    if (def.type === 'MINION') {
+    if (def.type === 'MINION' || def.type === 'LOCATION') {
       if (side === 'opponent' && !def.disguised) return { ok: false, reason: '這張手下不能打到對手場上' };
       if (def.disguised && side === undefined) {
-        if (p.board.length >= MAX_BOARD && s.players[opp(p.id)].board.length >= MAX_BOARD) return { ok: false, reason: '雙方場上都已滿' };
+        if (this.boardSpaceUsed(p.id) >= MAX_BOARD && this.boardSpaceUsed(s.players[opp(p.id)].id) >= MAX_BOARD) return { ok: false, reason: '雙方場上都已滿' };
       } else {
         const boardOwner = side === 'opponent' ? opp(p.id) : p.id;
-        if (s.players[boardOwner].board.length >= MAX_BOARD) return { ok: false, reason: side === 'opponent' ? '對手場上已滿' : '場上已滿' };
+        if (this.boardSpaceUsed(s.players[boardOwner].id) >= MAX_BOARD) return { ok: false, reason: side === 'opponent' ? '對手場上已滿' : '場上已滿' };
       }
     }
     if (def.secret) {
@@ -753,7 +818,7 @@ export class Game {
     if (p.heroPower.used || p.mana < p.heroPower.cost) return false;
     const def = this.powerDef(p);
     if (def.passive) return false;
-    if (def.needsBoardSpace && p.board.length >= MAX_BOARD) return false;
+    if (def.needsBoardSpace && this.boardSpaceUsed(p.id) >= MAX_BOARD) return false;
     if (!p.heroPower.heroCard && p.heroClass === 'SHAMAN' && BASIC_TOTEMS.every((t) => p.board.some((m) => m.cardId === t))) return false;
     if (def.chooseOne) {
       const opts = option === undefined ? def.chooseOne.map((_o, i) => i) : [option];
@@ -797,7 +862,7 @@ export class Game {
     if (costKind === 'corpses') {
       if ((p.corpses ?? 0) < inst.cost) return false;
     } else if (p.mana < inst.cost) return false;
-    if (def.needsBoardSpace && p.board.length >= MAX_BOARD) return false;
+    if (def.needsBoardSpace && this.boardSpaceUsed(p.id) >= MAX_BOARD) return false;
     if (def.target && !this.validTargets(def.target, this.s.current, true).length) return false;
     return true;
   }
@@ -982,6 +1047,7 @@ export class Game {
       }
     }
     p.overloadOwed = 0;
+    for (const location of p.locations ?? []) location.cooldown = Math.max(0, location.cooldown - 1);
     p.heroPower.used = false;
     if (p.secondaryHeroPower) p.secondaryHeroPower.used = false;
     p.cardsPlayedThisTurn = 0;
@@ -1095,6 +1161,7 @@ export class Game {
     position: number | undefined,
     option: number | undefined,
     side: 'self' | 'opponent' | undefined,
+    free = false,
   ): Gen {
     const s = this.s;
     const p = s.players[s.current];
@@ -1111,16 +1178,23 @@ export class Game {
         return !!d.corruptInto || !!d.corruptRepeatBuff;
       })
       .map((h) => h.uid);
+    for (const held of p.hand) if (held.uid !== hc.uid) held.locationLocked = false;
     const outcast = idx === 0 || idx === p.hand.length - 1;
     const combo = p.cardsPlayedThisTurn > 0;
     const echo = this.hasEcho(p.id, hc);
-    if (def.manaMirrorInHand) hc.lockedManaValue = Math.max(1, p.mana);
+    if (def.manaMirrorInHand) hc.lockedManaValue = Math.max(0, p.mana);
     const kind = this.costKind(p, hc);
-    if (kind === 'health') this.payHealth(p, cost);
+    if (free) { /* 由效果免費打出，不支付任何資源。 */ }
+    else if (kind === 'health') this.payHealth(p, cost);
     else if (kind === 'corpses') this.spendCorpses(p, cost);
     else {
       p.mana -= cost;
-      if (cost === 2) p.cardsPlayedForTwoMana = (p.cardsPlayedForTwoMana ?? 0) + 1;
+      if (cost === 2) {
+        p.cardsPlayedForTwoMana = (p.cardsPlayedForTwoMana ?? 0) + 1;
+        for (const card of [...p.hand, ...p.deck]) {
+          if (card.uid !== hc.uid && card.cardId === 'JAIL_470') card.twoManaCardsSeen = (card.twoManaCardsSeen ?? 0) + 1;
+        }
+      }
     }
     if (p.nextCardCorpsesTurn === s.turn) p.nextCardCorpsesTurn = undefined;
     if (def.type === 'SPELL' && p.nextSpellDiscount?.turn === s.turn) p.nextSpellDiscount = undefined;
@@ -1205,6 +1279,9 @@ export class Game {
       yield* this.emit({ k: 'summon', player: boardOwner, subject: m.uid, races: def.races });
       yield* this.emit({ k: 'cardPlayed', player: p.id, subject: m.uid, cardType: 'MINION', races: def.races, cardId: def.id, echo });
       if (this.minion(m.uid)) yield* this.checkSecrets(opp(p.id), 'enemyPlaysMinion', { it: { kind: 'char', uid: m.uid } });
+    } else if (def.type === 'LOCATION') {
+      this.addLocation(p.id, def.id);
+      yield* this.emit({ k: 'cardPlayed', player: p.id, cardType: 'LOCATION', cardId: def.id });
     } else if (def.type === 'SPELL') {
       this.spellCountered = false;
       yield* this.checkSecrets(opp(p.id), 'enemyCastsSpell', {});
@@ -1476,7 +1553,7 @@ export class Game {
   // ==========================================================================
 
   private *summonWarptooths(p: PlayerState): Gen {
-    while (p.board.length < MAX_BOARD) {
+    while (this.boardSpaceUsed(p.id) < MAX_BOARD) {
       const fromHand = p.hand.find((h) => h.cardId === 'JAIL_421');
       const fromDeck = p.deck.find((h) => h.cardId === 'JAIL_421');
       const card = fromHand ?? fromDeck;
@@ -1839,8 +1916,13 @@ export class Game {
     return poolCards(pool, own, this.s.players[opp(pid)].heroClass).some((x) => x.id === c.id);
   }
 
+  private isCoin(cardId: string): boolean {
+    // 官方有多種不同 ID 的幸運幣造型；不能只識別 GAME_005。
+    return getCard(cardId).nameEn === 'The Coin';
+  }
+
   private addToHand(p: PlayerState, cardId: string): HandCard | null {
-    const actual = cardId === 'GAME_005' && p.coinReplacement ? p.coinReplacement : cardId;
+    const actual = this.isCoin(cardId) && p.coinReplacement ? p.coinReplacement : cardId;
     return this.enterHandCard(p, this.newHandCard(actual));
   }
 
@@ -1891,7 +1973,7 @@ export class Game {
   /** 召喚手下（非從手牌打出） */
   private *summon(owner: PlayerId, cardId: string, position?: number, sourceCard?: HandCard): Gen<Minion | null> {
     const p = this.s.players[owner];
-    if (p.board.length >= MAX_BOARD) return null;
+    if (this.boardSpaceUsed(p.id) >= MAX_BOARD) return null;
     const m = this.makeMinion(owner, cardId, sourceCard);
     const pos = position === undefined ? p.board.length : Math.max(0, Math.min(position, p.board.length));
     p.board.splice(pos, 0, m);
@@ -1956,7 +2038,7 @@ export class Game {
   canLaunch(): { ok: boolean; reason?: string } {
     const p = this.me;
     if (!p.starship?.length) return { ok: false, reason: '還沒有組裝星艦組件' };
-    if (p.board.length >= MAX_BOARD) return { ok: false, reason: '場上已滿' };
+    if (this.boardSpaceUsed(p.id) >= MAX_BOARD) return { ok: false, reason: '場上已滿' };
     if (p.mana < this.launchCost(p)) return { ok: false, reason: '法力不足' };
     return { ok: true };
   }
@@ -2000,7 +2082,7 @@ export class Game {
   private *launch(pid: PlayerId, free: boolean): Gen<Minion | null> {
     const p = this.s.players[pid];
     const pieces = p.starship;
-    if (!pieces?.length || p.board.length >= MAX_BOARD) return null;
+    if (!pieces?.length || this.boardSpaceUsed(p.id) >= MAX_BOARD) return null;
     if (!free) {
       p.mana -= this.launchCost(p);
       p.launchDiscount = 0;
@@ -2019,7 +2101,7 @@ export class Game {
   /** 讓星艦登場（launched = 觸發組件的發射效果） */
   private *summonStarship(pid: PlayerId, pieces: StarshipPiece[], launched: boolean): Gen<Minion | null> {
     const p = this.s.players[pid];
-    if (p.board.length >= MAX_BOARD) return null;
+    if (this.boardSpaceUsed(p.id) >= MAX_BOARD) return null;
     const shipId = starshipIdFor(p.heroClass);
     const m = this.makeMinion(pid, shipId, { uid: 0, cardId: shipId, costMod: 0, atkBuff: 0, hpBuff: 0, starship: pieces });
     p.board.push(m);
@@ -2359,7 +2441,7 @@ export class Game {
       if (!p.secrets.includes(sec)) continue;
       // 目標已不存在時不觸發
       if (info.it?.kind === 'char' && ev !== 'friendlyMinionDies' && !this.char(info.it.uid)) continue;
-      if (ev === 'friendlyMinionDies' && p.board.length >= MAX_BOARD) continue;
+      if (ev === 'friendlyMinionDies' && this.boardSpaceUsed(p.id) >= MAX_BOARD) continue;
       this.revealSecret(owner, sec.uid);
       const ab = getCard(sec.cardId).abilities!.find((a) => a.on.k === 'secret')!;
       const ctx = this.baseCtx(owner);
@@ -2974,7 +3056,7 @@ export class Game {
           if (!m || m.owner === ctx.controller) continue;
           const from = s.players[m.owner];
           from.board = from.board.filter((x) => x !== m);
-          if (me.board.length >= MAX_BOARD) {
+          if (this.boardSpaceUsed(me.id) >= MAX_BOARD) {
             m.dead = true;
             from.board.push(m);
             continue;
@@ -3065,7 +3147,7 @@ export class Game {
       }
       case 'recruit':
         for (let i = 0; i < e.count; i++) {
-          if (me.board.length >= MAX_BOARD) break;
+          if (this.boardSpaceUsed(me.id) >= MAX_BOARD) break;
           const list = me.deck.filter((h) => {
             const d = getCard(h.cardId);
             if (d.type !== 'MINION') return false;
@@ -3097,7 +3179,7 @@ export class Game {
         break;
       }
       case 'raiseCorpses': {
-        const n = Math.min(e.max, me.corpses ?? 0, MAX_BOARD - me.board.length);
+        const n = Math.min(e.max, me.corpses ?? 0, MAX_BOARD - this.boardSpaceUsed(me.id));
         if (n <= 0) break;
         this.spendCorpses(me, n);
         this.log(me.id, `喚起了 ${n} 具屍體`);
@@ -3211,6 +3293,7 @@ export class Game {
   }
 
   private copyStats(src: Minion, m: Minion) {
+    m.prisonCards = src.prisonCards ? structuredClone(src.prisonCards) : undefined;
     m.parts = src.parts;
     m.starship = src.starship;
     m.baseAtk = src.baseAtk;
@@ -3671,7 +3754,7 @@ export class Game {
         const self = ctx.sourceUid !== null ? this.minion(ctx.sourceUid) : null;
         const candidates = foe.hand.filter((h) => getCard(h.cardId).type === 'MINION');
         const chosen = pick(s, candidates);
-        if (!self || !chosen || me.board.length > MAX_BOARD) break;
+        if (!self || !chosen || this.boardSpaceUsed(me.id) > MAX_BOARD) break;
         const pos = me.board.indexOf(self);
         if (pos < 0) break;
         foe.hand.splice(foe.hand.indexOf(chosen), 1);
@@ -3766,9 +3849,68 @@ export class Game {
         if (h) h.costMod -= this.atkOf(me.hero);
         break;
       }
+      case 'spireOfSolitude': {
+        const size = me.hand.length;
+        const token = this.newHandCard('JAIL_511t');
+        token.atkBuff = size - 1; token.hpBuff = size - 1;
+        const demon = yield* this.summon(me.id, token.cardId, undefined, token);
+        if (demon && this.alive(demon)) {
+          const enemy = pick(s, foe.board.filter((m) => this.alive(m) && !(m.dormantTurns ?? 0)));
+          if (enemy) yield* this.doAttack(demon.uid, enemy.uid);
+        }
+        break;
+      }
+      case 'lowSecurityWing': {
+        const card = pick(s, this.randomPool({ type: 'MINION', cls: 'SHAMAN' }, me.id, false));
+        if (card) {
+          const held = this.addToHand(me, card.id);
+          if (held) held.locationLocked = true;
+        }
+        break;
+      }
+      case 'zuramatPrison': {
+        const location = me.locations?.find((l) => l.uid === ctx.sourceUid);
+        if (!location || !me.hand.length) break;
+        const choices = [...me.hand];
+        const id = yield* this.choose(ctx, choices.map((h) => h.cardId), '選擇要捨棄的牌');
+        const selected = choices.find((h) => h.cardId === id);
+        if (!selected || !me.hand.includes(selected)) break;
+        me.hand.splice(me.hand.indexOf(selected), 1);
+        location.discarded.push(structuredClone(selected));
+        this.recombineShatter(me);
+        this.log(me.id, `舒拉邁特的牢獄捨棄了${this.name(selected.cardId)}`);
+        if (selected.cardId === 'JAIL_398') yield* this.impfernalOffboard(me.id);
+        if (!this.over) yield* this.summon(me.id, 'JAIL_887t3');
+        break;
+      }
+      case 'zuramatReplay': {
+        const source = ctx.sourceUid === null ? null : this.minion(ctx.sourceUid);
+        const card = pick(s, source?.prisonCards ?? []);
+        if (card) yield* this.replayPrisonCard(me.id, card);
+        break;
+      }
+      case 'lethalRecipe': {
+        const drawn = yield* this.draw(me, 2, { type: 'MINION' });
+        if (me.maxMana >= 10) for (const h of drawn) { h.atkBuff += 3; h.hpBuff += 3; }
+        break;
+      }
       case 'copyDeckSpells': {
+        const source = ctx.sourceUid !== null ? this.minion(ctx.sourceUid) : null;
+        if (source) source.copiedDeckSpellIds = [...new Set([...(source.copiedDeckSpellIds ?? []), ...me.deck.filter((h) => getCard(h.cardId).type === 'SPELL').map((h) => h.cardId)])];
         const copies = me.deck.filter((h) => getCard(h.cardId).type === 'SPELL').map((h) => ({ ...structuredClone(h), uid: this.uid() }));
         for (const h of copies) me.deck.splice(randomInt(s, me.deck.length + 1), 0, h);
+        break;
+      }
+      case 'drawCopiedDeckSpell': {
+        const source = ctx.sourceSnapshot ?? (ctx.sourceUid !== null ? this.minion(ctx.sourceUid) : null);
+        const ids = source?.copiedDeckSpellIds ?? [];
+        const eligible = me.deck.filter((h) => ids.includes(h.cardId));
+        const card = pick(s, eligible);
+        if (card) {
+          me.deck.splice(me.deck.indexOf(card), 1);
+          me.deck.push(card);
+          yield* this.draw(me, 1);
+        }
         break;
       }
       case 'shuffleRandomDHSpell': {
@@ -3839,14 +3981,14 @@ export class Game {
       case 'ectoplasm': {
         const list = ctx.sourceHandCard?.ectoplasmMinions ?? [];
         for (const id of list) {
-          if (me.board.length >= MAX_BOARD) break;
+          if (this.boardSpaceUsed(me.id) >= MAX_BOARD) break;
           yield* this.doSummon(ctx, me.id, id);
         }
         break;
       }
       case 'raithVanGeist': {
         for (const id of me.rebornThisGame ?? []) {
-          if (me.board.length >= MAX_BOARD) break;
+          if (this.boardSpaceUsed(me.id) >= MAX_BOARD) break;
           const summoned = yield* this.doSummon(ctx, me.id, id);
           if (!summoned) continue;
           const target = pick(s, foe.board.filter((m) => this.alive(m) && (m.dormantTurns ?? 0) <= 0));
@@ -3941,7 +4083,7 @@ export class Game {
         break;
       case 'picklockDamage': {
         const self = ctx.sourceUid !== null ? this.minion(ctx.sourceUid) : null;
-        if (self && ctx.chosen !== null) yield* this.damage(this.dmgSource(ctx), ctx.chosen, Math.max(1, self.baseAtk));
+        if (self && ctx.chosen !== null) yield* this.damage(this.dmgSource(ctx), ctx.chosen, Math.max(0, self.baseAtk));
         break;
       }
       case 'beatrixStart': {
@@ -3982,7 +4124,7 @@ export class Game {
         const chosen = yield* this.choose(ctx, options, '選擇強化假幣');
         me.coinReplacement = chosen;
         for (const zone of [me.hand, me.deck]) {
-          for (const h of zone) if (h.cardId === 'GAME_005') h.cardId = chosen;
+          for (const h of zone) if (this.isCoin(h.cardId)) h.cardId = chosen;
         }
         for (let i = 0; i < 3; i++) this.addToHand(me, chosen);
         break;
@@ -3990,7 +4132,7 @@ export class Game {
       case 'grimyCoin': {
         const enemies = foe.board.filter((m) => this.alive(m));
         const victim = pick(s, enemies);
-        if (victim) yield* this.damage(this.dmgSource(ctx), victim.uid, 2);
+        if (victim) yield* this.damage(this.dmgSource(ctx), victim.uid, 2 + this.spellDamage(ctx.controller));
         break;
       }
       case 'kabalCoinPotion': {
@@ -4004,26 +4146,21 @@ export class Game {
       case 'randomKazakusPotion1': {
         for (const effect of ctx.sourceHandCard?.trialEffects ?? []) {
           if (effect === 'potion_aoe') {
-            for (const m of [...me.board, ...foe.board]) if (this.alive(m)) yield* this.damage(this.dmgSource(ctx), m.uid, 2);
+            for (const m of [...me.board, ...foe.board]) if (this.alive(m)) yield* this.damage(this.dmgSource(ctx), m.uid, 2 + this.spellDamage(ctx.controller));
           } else if (effect === 'potion_health') {
             for (const m of me.board) { m.maxHp += 2; m.hp += 2; }
           } else if (effect === 'potion_damage') {
-            const target = pick(s, this.chars().filter((x) => this.alive(x) && x.owner !== ctx.controller));
-            if (target) yield* this.damage(this.dmgSource(ctx), target.uid, 3);
+            if (ctx.chosen !== null) yield* this.damage(this.dmgSource(ctx), ctx.chosen, 3 + this.spellDamage(ctx.controller));
           } else if (effect === 'potion_armor') me.hero.armor += 4;
           else if (effect === 'potion_freeze') {
-            const target = pick(s, this.chars().filter((x) => this.alive(x) && x.owner !== ctx.controller));
+            const target = pick(s, foe.board.filter((x) => this.alive(x) && (x.dormantTurns ?? 0) <= 0));
             if (target) this.freeze(target);
           } else if (effect === 'potion_resurrect') {
             const id = pick(s, me.graveyard);
             if (id) yield* this.summon(ctx.controller, id);
           } else if (effect === 'potion_draw') yield* this.draw(me, 1);
           else if (effect === 'potion_demon22') {
-            const demon = pick(s, this.randomPool({ type: 'MINION', race: 'DEMON', cost: 2 }, ctx.controller, false));
-            if (demon) {
-              const m = yield* this.summon(ctx.controller, demon.id);
-              if (m) { m.baseAtk = 2; m.baseHp = 2; m.maxHp = 2 + m.auraHp; m.hp = m.maxHp; }
-            }
+            yield* this.summon(ctx.controller, 'CFM_621_m4');
           } else if (effect === 'potion_addDemon') {
             const demon = pick(s, this.randomPool({ type: 'MINION', race: 'DEMON' }, ctx.controller, false));
             if (demon) this.addToHand(me, demon.id);
@@ -4079,7 +4216,7 @@ export class Game {
             for (const m of me.board) { m.atkBuff += 3; m.maxHp += 3; m.hp += 3; }
           } else if (effect === 'conspiracy') {
             const target = pick(s, foe.board.filter((m) => this.alive(m)));
-            if (target && me.board.length < MAX_BOARD) {
+            if (target && this.boardSpaceUsed(me.id) < MAX_BOARD) {
               foe.board = foe.board.filter((m) => m !== target);
               target.owner = me.id; target.sleeping = true; target.attacks = 0; me.board.push(target); this.recalcAuras();
             }
@@ -4107,8 +4244,7 @@ export class Game {
       case 'azalinaStart': {
         me.hero.maxHp = 40;
         me.hero.hp = 40;
-        // 此專案原本固定 30 張牌組；Azalina 在開局時把自己的部分裁成 20，再混入對手隨機 20 張複製。
-        if (me.deck.length > 20) me.deck = shuffle(s, [...me.deck]).slice(0, 20);
+        // 組牌階段已驗證 20 張自組牌；保留全部自組牌，不隨機刪牌。
         const copies = shuffle(s, [...foe.deck]).slice(0, 20);
         for (const h of copies) {
           const c = { ...structuredClone(h), uid: this.uid(), startedInDeck: false, copiedFromOpponent: true };
@@ -4157,7 +4293,7 @@ export class Game {
         break;
       }
       case 'lotusTroublemaker': {
-        const shots = 1 + (me.cardsPlayedForTwoMana ?? 0);
+        const shots = 1 + (ctx.sourceHandCard?.twoManaCardsSeen ?? 0);
         for (let i = 0; i < shots; i++) {
           const enemies = this.chars().filter((c) => this.alive(c) && c.owner !== ctx.controller);
           const victim = pick(s, enemies);
@@ -4181,7 +4317,7 @@ export class Game {
             rctx.chosen = pick(s, enemies.length ? enemies : legal) ?? null;
           }
           if (def.type === 'MINION') {
-            if (me.board.length >= MAX_BOARD) continue;
+            if (this.boardSpaceUsed(me.id) >= MAX_BOARD) continue;
             const m = yield* this.doSummon(rctx, ctx.controller, def.id);
             if (!m) continue;
             rctx.sourceUid = m.uid;
@@ -4381,7 +4517,7 @@ export class Game {
         const golems: Minion[] = [];
         let extra = 0;
         for (let i = 0; i < n; i++) {
-          const m = me.board.length < MAX_BOARD ? yield* this.doSummon(ctx, ctx.controller, 'RLK_085t') : null;
+          const m = this.boardSpaceUsed(me.id) < MAX_BOARD ? yield* this.doSummon(ctx, ctx.controller, 'RLK_085t') : null;
           if (m) golems.push(m);
           else extra++;
         }
@@ -4450,7 +4586,7 @@ export class Game {
       case 'fillBoardRandom': {
         // 天譴軍團：用隨機不死族填滿你的場面
         const pool = this.randomPool({ type: 'MINION', race: args.race as Race }, me.id, false);
-        for (let i = 0; i < MAX_BOARD && me.board.length < MAX_BOARD; i++) {
+        for (let i = 0; i < MAX_BOARD && this.boardSpaceUsed(me.id) < MAX_BOARD; i++) {
           const c = pick(s, pool);
           if (c) yield* this.doSummon(ctx, me.id, c.id);
         }
@@ -4877,7 +5013,7 @@ export class Game {
         }
         break;
       case 'fillBoard':
-        while (me.board.length < MAX_BOARD) {
+        while (this.boardSpaceUsed(me.id) < MAX_BOARD) {
           const m = yield* this.doSummon(ctx, ctx.controller, args.card as string);
           if (!m) break;
         }
@@ -4932,7 +5068,7 @@ export class Game {
             return d.type === 'MINION' && (!race || !!d.races?.includes(race) || !!d.races?.includes('ALL'));
           }),
         );
-        if (!hc || me.board.length >= MAX_BOARD) break;
+        if (!hc || this.boardSpaceUsed(me.id) >= MAX_BOARD) break;
         me.hand = me.hand.filter((h) => h !== hc);
         this.recombineShatter(me);
         const m = this.makeMinion(me.id, hc.cardId, hc);
@@ -4946,7 +5082,7 @@ export class Game {
       case 'oakheart':
         // 橡心大師：號召攻擊力 1、2、3 的手下各一個
         for (const atk of [1, 2, 3]) {
-          if (me.board.length >= MAX_BOARD) break;
+          if (this.boardSpaceUsed(me.id) >= MAX_BOARD) break;
           const hc = pick(s, me.deck.filter((h) => getCard(h.cardId).type === 'MINION' && getCard(h.cardId).attack === atk));
           if (!hc) continue;
           me.deck.splice(me.deck.indexOf(hc), 1);
@@ -5026,7 +5162,7 @@ export class Game {
       case 'relaunchAll':
         // 吉姆‧雷諾：重新發射本場對戰中發射過的每一艘星艦
         for (const pieces of [...(me.launched ?? [])]) {
-          if (me.board.length >= MAX_BOARD) break;
+          if (this.boardSpaceUsed(me.id) >= MAX_BOARD) break;
           yield* this.summonStarship(me.id, pieces, true);
           if (this.over) return;
         }
@@ -5114,7 +5250,7 @@ export class Game {
         // 召喚本場對戰中死亡的所有友方某種族手下
         const race = args.race as Race;
         for (const id of [...me.graveyard]) {
-          if (me.board.length >= MAX_BOARD) break;
+          if (this.boardSpaceUsed(me.id) >= MAX_BOARD) break;
           const races = getCard(id).races ?? [];
           if (races.includes(race) || races.includes('ALL')) yield* this.doSummon(ctx, ctx.controller, id);
         }

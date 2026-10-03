@@ -3,7 +3,7 @@ import { getCard, hasCard, HEROES } from '../../cards/registry';
 import { AiBrain, aiMulligan, chooseAction, EMOTE_NAMES, EMOTE_TEXT, type Emote } from '../../engine/ai';
 import { Game } from '../../engine/game';
 import { CLASS_NAMES } from '../../engine/heroes';
-import { MAX_BOARD, type Action, type Hero, type Minion, type PlayerId, type PlayerState } from '../../engine/state';
+import { MAX_BOARD, type Action, type Hero, type Minion, type Location, type PlayerId, type PlayerState } from '../../engine/state';
 import type { CardDef } from '../../engine/types';
 import { DIFFICULTY_NAMES } from '../../game/economy';
 import { RUNE_NAMES } from '../../game/decks';
@@ -424,8 +424,8 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
   const selectedDef = selectedCard ? g.handDef(selectedCard) : null;
   const selectedStats = selectedCard && selectedDef?.type === 'MINION' ? g.handStats(ME, selectedCard) : null;
   const placing = mode.k === 'card' && mode.stage === 'place';
-  const canPlaceSelf = placing && me.board.length < MAX_BOARD;
-  const canPlaceOpponent = placing && !!selectedDef?.disguised && foe.board.length < MAX_BOARD;
+  const canPlaceSelf = placing && g.boardSpaceUsed(ME) < MAX_BOARD;
+  const canPlaceOpponent = placing && !!selectedDef?.disguised && g.boardSpaceUsed(AI) < MAX_BOARD;
 
   const hint = (() => {
     if (s.phase === 'mulligan') return '';
@@ -447,6 +447,22 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
     if (myTurn && c.owner === ME && mode.k === 'idle' && g.canAttack(c.uid)) cls.push('can-attack');
     if (mode.k === 'attack' && mode.attacker === c.uid) cls.push('attacking-selected');
     return cls.join(' ');
+  };
+
+  const renderLocation = (location: Location) => {
+    const def = getCard(location.cardId);
+    const ready = myTurn && location.owner === ME && g.canUseLocation(location.uid).ok;
+    return (
+      <button key={location.uid} data-uid={location.uid} className={`battle-location ${ready ? 'ready' : ''}`}
+        aria-label={`${def.name}：${location.durability} 耐久，${location.cooldown ? '冷卻中' : '可啟動'}`}
+        disabled={!ready} onClick={(e) => { e.stopPropagation(); act({ type: 'useLocation', uid: location.uid }); }}
+        onMouseEnter={() => setInspect({ cardId: location.cardId })} onMouseLeave={() => setInspect(null)}>
+        <Art cardId={location.cardId} label={def.name} />
+        <strong>{def.name}</strong>
+        <span>地標 · 耐久 {location.durability}</span>
+        <span>{location.cooldown ? `冷卻 ${location.cooldown}` : location.owner === ME ? '點擊啟動' : '已就緒'}</span>
+      </button>
+    );
   };
 
   const renderMinion = (m: Minion) => (
@@ -570,6 +586,7 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
             }
           }}
         >
+          {(foe.locations ?? []).map(renderLocation)}
           {canPlaceOpponent && <Slot onClick={() => onPlace(0, 'opponent')} />}
           {foe.board.map((m, i) => (
             <span className="board-cell" key={m.uid}>
@@ -593,6 +610,7 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
             }
           }}
         >
+          {(me.locations ?? []).map(renderLocation)}
           {canPlaceSelf && <Slot onClick={() => onPlace(0, 'self')} />}
           {me.board.map((m, i) => (
             <span className="board-cell" key={m.uid}>
@@ -698,6 +716,7 @@ export function Battle({ config, onExit, onRematch }: { config: BattleConfig; on
                   selected={selectedHand === h.uid}
                 />
                 {echo && <span className="echo-badge">回音</span>}
+                {h.locationLocked && <span className="prepare-badge" title="先打出另一張牌才能解鎖">🔒 鎖定</span>}
                 {h.prepared && <span className="prepare-badge" title="已預備；預備當回合不能打出">🔒 預備</span>}
                 {g.costKind(me, h) !== 'mana' && (
                   <span className={`cost-kind ${g.costKind(me, h)}`} title={g.costKind(me, h) === 'health' ? '消耗生命值而不是法力' : '消耗屍體而不是法力'}>

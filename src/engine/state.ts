@@ -28,6 +28,8 @@ export interface HandCard {
   healthCostUntil?: number;
   /** 暫時的卡：回合結束時從手牌消失 */
   temporary?: boolean;
+  /** 低警戒區：直到擁有者打出另一張牌前無法打出。 */
+  locationLocked?: boolean;
   /** 預備：永久折扣（與其他 costMod 分開，方便洗回牌庫時重置） */
   prepareDiscount?: number;
   /** 已經預備過；同一張手牌實體只能預備一次 */
@@ -42,6 +44,8 @@ export interface HandCard {
   spellTransformProgress?: number;
   /** Picklock 打出瞬間鎖定的剩餘法力值 */
   lockedManaValue?: number;
+  /** 玉蓮幫滋事者在手牌或牌堆期間見過的 2 法力出牌次數。 */
+  twoManaCardsSeen?: number;
   /** Breakout Architect：這張法術打出時效果會施放兩次 */
   castTwice?: boolean;
   /** SI:7：這張牌在手中時曾有友方潛行手下攻擊 */
@@ -65,6 +69,16 @@ export interface HandCard {
   trialEffects?: string[];
   trialCost?: number;
   trialDelay?: number;
+}
+
+export interface Location {
+  uid: number;
+  cardId: string;
+  owner: PlayerId;
+  durability: number;
+  cooldown: number;
+  playOrder: number;
+  discarded: HandCard[];
 }
 
 export interface Minion {
@@ -98,6 +112,10 @@ export interface Minion {
   summonedTurn: number;
   /** Ancient Augur：戰吼暗中標記的對手手牌 UID */
   markedHandUid?: number;
+  /** R4T-C4TCH3R 戰吼所複製的法術種類。 */
+  copiedDeckSpellIds?: string[];
+  /** 舒拉邁特的牢獄曾捨棄的牌（供衍生手下重播）。 */
+  prisonCards?: HandCard[];
   /** 紫羅蘭堡休眠：還要經過幾個擁有者回合才甦醒。休眠中不能被互動或觸發能力。 */
   dormantTurns?: number;
   attacks: number;
@@ -164,6 +182,7 @@ export interface PlayerState {
   deck: HandCard[];
   hand: HandCard[];
   board: Minion[];
+  locations?: Location[];
   secrets: SecretInst[];
   graveyard: string[];
   /** 本場對戰中你的克蘇恩累積獲得的加成（無論它在哪裡） */
@@ -318,6 +337,7 @@ export interface GameState {
 }
 
 export type Action =
+  | { type: 'useLocation'; uid: number }
   | { type: 'play'; handUid: number; target?: number; position?: number; option?: number; side?: 'self' | 'opponent' }
   | { type: 'attack'; attacker: number; target: number }
   | { type: 'heroPower'; target?: number; option?: number }

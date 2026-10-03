@@ -111,7 +111,7 @@ function DrawnCard(p: CardViewProps) {
   const style = { '--w': `${width}px`, '--class': color, '--rarity': RARITY_COLORS[def.rarity] } as CSSProperties;
   const costClass = cost < def.cost ? 'lower' : cost > def.cost ? 'higher' : '';
   const race = def.races?.[0];
-  const label = race ? RACE_NAMES[race] : def.classes && def.classes.length > 1 ? def.classes.map((c) => CLASS_NAMES[c]).join('/') : '';
+  const label = def.type === 'LOCATION' ? '地標' : race ? RACE_NAMES[race] : def.classes && def.classes.length > 1 ? def.classes.map((c) => CLASS_NAMES[c]).join('/') : '';
   return (
     <div
       className={`card card-${def.type.toLowerCase()} ${p.dimmed ? 'dimmed' : ''} ${p.selected ? 'selected' : ''} ${p.playable ? 'playable' : ''} ${p.className ?? ''}`}
@@ -140,6 +140,7 @@ function DrawnCard(p: CardViewProps) {
           {(['blood', 'frost', 'unholy'] as const).flatMap((k) => Array.from({ length: def.runes?.[k] ?? 0 }, (_, i) => <span key={k + i} className={`rune ${k}`} />))}
         </div>
       )}
+      {def.type === 'LOCATION' && <div className="card-hp is-weapon" title="耐久">{health}</div>}
       {def.type === 'HERO' && !!def.armor && <div className="card-hp is-armor">{def.armor}</div>}
       {(def.type === 'MINION' || def.type === 'WEAPON') && (
         <>

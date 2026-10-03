@@ -5,6 +5,11 @@ import type { Ability, Amount, CardClass, CardDef, Effect, Runes } from '../engi
 
 export const DECK_SIZE = 30;
 
+/** 阿薩琳娜的 20 張自組牌；另外 20 張在開局時複製自對手。 */
+export function deckSize(cards: readonly string[]): number {
+  return cards.includes('JAIL_430') ? 20 : DECK_SIZE;
+}
+
 export type HeroClass = Exclude<CardClass, 'NEUTRAL'>;
 
 export interface Deck {
@@ -67,7 +72,8 @@ export interface DeckProblem {
 
 export function validateDeck(deck: Deck, owned?: Record<string, number>): DeckProblem {
   const errors: string[] = [];
-  if (deck.cards.length !== DECK_SIZE) errors.push(`套牌需要剛好 ${DECK_SIZE} 張（目前 ${deck.cards.length} 張）`);
+  const size = deckSize(deck.cards);
+  if (deck.cards.length !== size) errors.push(`套牌需要剛好 ${size} 張（目前 ${deck.cards.length} 張）`);
   const counts = new Map<string, number>();
   for (const id of deck.cards) counts.set(id, (counts.get(id) ?? 0) + 1);
   for (const [id, n] of counts) {
@@ -226,6 +232,9 @@ export function cardQuality(def: CardDef): number {
     }
     if (def.enrage) value += def.enrage.atk * 0.4;
     q = value - (def.cost * 2 + 1);
+  } else if (def.type === 'LOCATION') {
+    value += (def.locationEffects ?? []).reduce((n, e) => n + effectValue(e), 0) * (def.health ?? 1);
+    q = value - def.cost;
   } else if (def.type === 'WEAPON') {
     value += (def.attack ?? 0) * (def.health ?? 0) * 0.9;
     q = value - (def.cost * 2 + 0.5);
@@ -250,6 +259,8 @@ const CURVE: Record<number, number> = { 0: 1, 1: 4, 2: 6, 3: 6, 4: 5, 5: 4, 6: 3
 
 export interface BuildOptions {
   seed: number;
+  /** 補滿既有套牌時的張數上限。 */
+  size?: number;
   /** 0 = 完全依強度；越大越隨機 */
   noise: number;
   /** 最多幾張傳說 */
@@ -289,6 +300,7 @@ export function buildDeck(heroClass: HeroClass, opts: BuildOptions): string[] {
   const curve = opts.curve ?? CURVE;
   const copiesOf = (c: CardDef) => Math.min(opts.singleton ? 1 : maxCopies(c), opts.owned ? opts.owned[c.id] ?? 0 : 2);
   const deck: string[] = [];
+  const capacity = () => Math.min(opts.size ?? DECK_SIZE, deckSize(deck));
   const perCost = new Map<number, number>();
   let legendaries = 0;
   const runes: Required<Runes> = { blood: 0, frost: 0, unholy: 0, ...opts.runes };
@@ -297,8 +309,9 @@ export function buildDeck(heroClass: HeroClass, opts: BuildOptions): string[] {
   };
   const add = (c: CardDef, respectCurve: boolean) => {
     if (!runesFit(runes, c)) return;
+    if (deck.length >= deckSize([...deck, c.id])) return;
     const have = deck.filter((x) => x === c.id).length;
-    for (let i = have; i < copiesOf(c) && deck.length < DECK_SIZE; i++) {
+    for (let i = have; i < copiesOf(c) && deck.length < capacity(); i++) {
       const cost = Math.min(c.cost, 10);
       if (respectCurve && (perCost.get(cost) ?? 0) >= (curve[cost] ?? 1)) return;
       if (c.rarity === 'LEGENDARY') {
@@ -312,26 +325,27 @@ export function buildDeck(heroClass: HeroClass, opts: BuildOptions): string[] {
   };
   const fill = (cards: CardDef[]) => {
     for (const c of cards) {
-      if (deck.length >= DECK_SIZE) break;
+      if (deck.length >= capacity()) break;
       add(c, true);
     }
     for (const c of cards) {
-      if (deck.length >= DECK_SIZE) break;
+      if (deck.length >= capacity()) break;
       if (!deck.includes(c.id)) add(c, false);
     }
     // 卡不夠時（收藏太少）重複補滿
     for (const c of cards) {
-      if (deck.length >= DECK_SIZE) break;
+      if (deck.length >= capacity()) break;
+      if (deck.length >= deckSize([...deck, c.id])) continue;
       const have = deck.filter((x) => x === c.id).length;
       const limit = copiesOf(c);
       if (have >= limit || !runesFit(runes, c)) continue;
       takeRunes(c);
-      for (let i = have; i < limit && deck.length < DECK_SIZE; i++) deck.push(c.id);
+      for (let i = have; i < limit && deck.length < capacity(); i++) deck.push(c.id);
     }
   };
   fill(scored);
   // 主題卡不夠 30 張時，用一般的卡補滿
-  if (deck.length < DECK_SIZE && opts.filter) fill(rank(base));
+  if (deck.length < capacity() && opts.filter) fill(rank(base));
   return shuffle(rng, deck).sort((a, b) => getCard(a).cost - getCard(b).cost);
 }
 

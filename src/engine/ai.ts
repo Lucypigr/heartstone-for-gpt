@@ -28,6 +28,9 @@ export function legalActions(g: Game): Action[] {
       } else if (!req || req.optional) out.push({ type: 'play', handUid: hc.uid, option });
     }
   }
+  for (const location of p.locations ?? []) {
+    if (g.canUseLocation(location.uid).ok) out.push({ type: 'useLocation', uid: location.uid });
+  }
   if (g.canHeroPower()) {
     const options = g.heroPowerOptions() ? g.heroPowerOptions()!.map((_o, i) => i) : [undefined];
     for (const option of options) {
@@ -98,7 +101,7 @@ export function evaluate(g: Game, me: PlayerId, w: EvalWeights = DEFAULT_WEIGHTS
   }
   const a = s.players[me];
   const b = s.players[opp(me)];
-  let score = 0;
+  let score = (a.locations ?? []).reduce((n, l) => n + l.durability * 2, 0) - (b.locations ?? []).reduce((n, l) => n + l.durability * 2, 0);
   score += heroValue(a.hero.hp, a.hero.armor) - heroValue(b.hero.hp, b.hero.armor) * w.face;
   score += a.board.reduce((x, m) => x + minionValue(g, m), 0);
   score -= b.board.reduce((x, m) => x + minionValue(g, m), 0) * w.enemyBoard;

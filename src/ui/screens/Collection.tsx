@@ -2,7 +2,7 @@ import { useMemo, useState, type CSSProperties } from 'react';
 import { cardClasses, COLLECTIBLE, getCard, HEROES, PLAYABLE_CLASSES } from '../../cards/registry';
 import { CLASS_NAMES } from '../../engine/heroes';
 import type { CardClass, CardDef, Rarity } from '../../engine/types';
-import { buildDeck, cardAllowed, deckCurve, deckRunes, DECK_SIZE, MAX_RUNES, maxCopies, RUNE_KINDS, RUNE_NAMES, runesFit, validateDeck, type Deck } from '../../game/decks';
+import { buildDeck, cardAllowed, deckCurve, deckRunes, deckSize, MAX_RUNES, maxCopies, RUNE_KINDS, RUNE_NAMES, runesFit, validateDeck, type Deck } from '../../game/decks';
 import { CRAFT_COST, DISENCHANT_VALUE, RARITY_NAMES } from '../../game/economy';
 import { decodeDeck, encodeDeck } from '../../game/deckstring';
 import { craftCard, deleteDeck, disenchantCard, disenchantExtras, newId, saveDeck, type Profile } from '../../game/profile';
@@ -61,7 +61,8 @@ export function Collection() {
     if (!editing) return;
     const owned = p.collection[c.id] ?? 0;
     const n = inDeck(c.id);
-    if (editing.cards.length >= DECK_SIZE) return setMessage('套牌已經有 30 張了');
+    const size = deckSize([...editing.cards, c.id]);
+    if (editing.cards.length >= size) return setMessage(`這副套牌上限為 ${size} 張；請先移除多餘的卡牌`);
     if (n >= maxCopies(c)) return setMessage(`【${c.name}】最多只能放 ${maxCopies(c)} 張`);
     if (n >= owned) return setMessage(`你只有 ${owned} 張【${c.name}】`);
     if (!runesFit(deckRunes(editing.cards), c)) return setMessage(`符文最多 ${MAX_RUNES} 個，【${c.name}】的符文放不下`);
@@ -252,7 +253,7 @@ export function Collection() {
                   >
                     <Art cardId={HEROES[d.heroClass].hero} className="deck-row-art" label={CLASS_NAMES[d.heroClass].slice(0, 1)} color={CLASS_COLORS[d.heroClass]} />
                     <span className="deck-row-name">{d.name}</span>
-                    <span className={`deck-row-count ${ok ? '' : 'bad'}`}>{d.cards.length}/30</span>
+                    <span className={`deck-row-count ${ok ? '' : 'bad'}`}>{d.cards.length}/{deckSize(d.cards)}</span>
                   </button>
                 );
               })}
@@ -312,7 +313,7 @@ export function Collection() {
                 onClick={() => {
                   try {
                     const d = decodeDeck(importText);
-                    const deck: Deck = { id: newId(), name: d.name ?? `匯入的${CLASS_NAMES[d.heroClass]}套牌`, heroClass: d.heroClass, freeform: false, cards: d.cards.slice(0, DECK_SIZE) };
+                    const deck: Deck = { id: newId(), name: d.name ?? `匯入的${CLASS_NAMES[d.heroClass]}套牌`, heroClass: d.heroClass, freeform: false, cards: d.cards };
                     deck.freeform = deck.cards.some((id) => !cardAllowed(getCard(id), d.heroClass, false));
                     const missing = countMissing(deck, p.collection);
                     setEditing(deck);
@@ -428,13 +429,14 @@ function DeckEditor({
       const def = getCard(id);
       if (n > 0 && cardAllowed(def, deck.heroClass, deck.freeform)) pool[id] = n;
     }
-    const extra = buildDeck(deck.heroClass, { seed: Date.now() % 100000, noise: 1, owned: pool, runes: deckRunes(deck.cards) }).filter((id) => {
+    const extra = buildDeck(deck.heroClass, { seed: Date.now() % 100000, noise: 1, size: deckSize(deck.cards), owned: pool, runes: deckRunes(deck.cards) }).filter((id) => {
       const def = getCard(id);
       return deck.cards.filter((x) => x === id).length < maxCopies(def);
     });
     const cards = [...deck.cards];
     for (const id of extra) {
-      if (cards.length >= DECK_SIZE) break;
+      if (cards.length >= deckSize(cards)) break;
+      if (cards.length >= deckSize([...cards, id])) continue;
       const def = getCard(id);
       if (cards.filter((x) => x === id).length >= Math.min(maxCopies(def), collection[id] ?? 0)) continue;
       if (!runesFit(deckRunes(cards), def)) continue;
@@ -475,8 +477,8 @@ function DeckEditor({
           })}
         </div>
       )}
-      <div className={`deck-count ${deck.cards.length === DECK_SIZE ? 'full' : ''}`}>
-        {deck.cards.length} / {DECK_SIZE}
+      <div className={`deck-count ${deck.cards.length === deckSize(deck.cards) ? 'full' : ''}`}>
+        {deck.cards.length} / {deckSize(deck.cards)}
       </div>
       {deck.cards.includes('JAIL_397') && (
         <div className="problems" style={{ padding: 10 }}>
@@ -537,7 +539,7 @@ function DeckEditor({
         </ul>
       )}
       <div className="deck-actions">
-        <button className="btn" onClick={autoFill} disabled={deck.cards.length >= DECK_SIZE}>
+        <button className="btn" onClick={autoFill} disabled={deck.cards.length >= deckSize(deck.cards)}>
           🪄 自動補滿
         </button>
         <button className="btn" onClick={() => onChange({ ...deck, cards: [] })}>

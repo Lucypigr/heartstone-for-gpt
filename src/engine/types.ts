@@ -20,7 +20,7 @@ export type CardClass =
 
 export type Rarity = 'FREE' | 'COMMON' | 'RARE' | 'EPIC' | 'LEGENDARY';
 
-export type CardType = 'MINION' | 'SPELL' | 'WEAPON' | 'HERO';
+export type CardType = 'MINION' | 'SPELL' | 'WEAPON' | 'HERO' | 'LOCATION';
 
 export type Race =
   | 'BEAST'
@@ -427,6 +427,8 @@ export interface CardDef {
   spellDamage?: number;
   overload?: number;
   abilities?: Ability[];
+  /** 地標的主動能力；不屬於戰吼或法術。 */
+  locationEffects?: Effect[];
   auras?: Aura[];
   /** 受傷時攻擊力加成（激怒） */
   enrage?: { atk: number };

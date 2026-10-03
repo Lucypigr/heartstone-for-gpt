@@ -138,7 +138,7 @@ export function Ladder({
       <h2>選擇套牌</h2>
       {valid.length === 0 ? (
         <div className="panel">
-          <p>你目前沒有完整的套牌（需要 30 張）。</p>
+          <p>你目前沒有符合組牌規則的完整套牌。</p>
           <button className="btn primary" onClick={() => go('collection')}>
             去組一副套牌
           </button>

@@ -481,18 +481,18 @@ describe('2026：紫羅蘭堡剩餘通用機制', () => {
   it('Picklock 的費用與手牌屬性等於剩餘法力，打出後鎖定並用該值造成傷害', () => {
     const g = newGame();
     const p = g.s.players[0];
-    const foe = g.s.players[1];
+    const target = put(g, 'CS2_200', 1);
     const uid = give(g, 'JAIL_501');
     p.mana = 6;
     const hc = p.hand.find((h) => h.uid === uid)!;
     expect(g.costOf(p, hc)).toBe(6);
     expect(g.handStats(0, hc)).toMatchObject({ atk: 6, hp: 6 });
-    const before = foe.hero.hp;
-    expect(g.apply({ type: 'play', handUid: uid, target: foe.hero.uid, position: 0 })).toBe(true);
+    const before = target.hp;
+    expect(g.apply({ type: 'play', handUid: uid, target: target.uid, position: 0 })).toBe(true);
     const m = p.board.find((x) => x.cardId === 'JAIL_501')!;
     expect(m.baseAtk).toBe(6);
     expect(m.baseHp).toBe(6);
-    expect(foe.hero.hp).toBe(before - 6);
+    expect(target.hp).toBe(before - 6);
   });
 });
 
@@ -610,13 +610,22 @@ describe('紫羅蘭堡最後特殊卡 2B', () => {
 
 describe('紫羅蘭堡最後特殊卡 2A', () => {
   it('Azalina 開局 40 血並形成 40 張牌庫，戰吼補滿手牌', () => {
-    const deck0 = ['JAIL_430', ...Array(29).fill('CS2_182')];
+    const deck0 = ['JAIL_430', ...Array(19).fill('CS2_182')];
     const deck1 = Array(30).fill('CS2_231');
     const g = Game.create({ decks: [deck0, deck1], classes: ['PRIEST', 'WARRIOR'], names: ['A','B'], ai: [false,false], seed: 7, first: 0 });
     const p = g.s.players[0];
     expect(p.hero.maxHp).toBe(40);
     expect(p.hero.hp).toBe(40);
     expect(p.deck.length + p.hand.length).toBe(40);
+    const all = [...p.deck, ...p.hand];
+    expect(all.filter((h) => h.cardId === 'CS2_182')).toHaveLength(19);
+    expect(all.filter((h) => h.cardId === 'JAIL_430')).toHaveLength(1);
+    expect(all.filter((h) => h.cardId === 'CS2_231' && h.copiedFromOpponent)).toHaveLength(20);
+    g.apply({ type: 'mulligan', player: 0, replace: [] });
+    g.apply({ type: 'mulligan', player: 1, replace: [] });
+    p.hand = [];
+    play(g, 'JAIL_430');
+    expect(p.hand).toHaveLength(10);
   });
 
   it('Lotus Troublemaker 會依本場 2 費出牌次數增加射擊', () => {

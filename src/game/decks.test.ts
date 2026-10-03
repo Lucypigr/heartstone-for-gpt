@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { COLLECTIBLE, getCard } from '../cards/registry';
-import { buildDeck, deckRunes, MAX_RUNES, runesFit, runeTotal, validateDeck, type Deck } from './decks';
+import { buildDeck, deckRunes, deckSize, MAX_RUNES, runesFit, runeTotal, validateDeck, type Deck } from './decks';
 
 const deck = (cards: string[]): Deck => ({ id: 't', name: 't', heroClass: 'DEATHKNIGHT', freeform: false, cards });
 const NEUTRAL = COLLECTIBLE.filter((c) => c.cardClass === 'NEUTRAL' && c.rarity !== 'LEGENDARY' && !c.classes).slice(0, 15);
@@ -37,5 +37,28 @@ describe('死亡騎士符文', () => {
     const cards = buildDeck('DEATHKNIGHT', { seed: 7, noise: 6, runes: { frost: 3 } });
     const r = deckRunes(cards);
     expect(r.blood + r.unholy).toBe(0);
+  });
+});
+
+
+describe('阿薩琳娜的 20 張組牌規則', () => {
+  const priest = (cards: string[]): Deck => ({ id: 'azalina', name: '阿薩琳娜', heroClass: 'PRIEST', freeform: false, cards });
+  const filler = NEUTRAL.flatMap((c) => [c.id, c.id]);
+
+  it('需要 20 張自組牌，不能拿普通的 30 張牌組隨機刪牌', () => {
+    expect(validateDeck(priest(['JAIL_430', ...filler.slice(0, 19)])).ok).toBe(true);
+    const invalid = validateDeck(priest(['JAIL_430', ...filler.slice(0, 29)]));
+    expect(invalid.ok).toBe(false);
+    expect(invalid.errors).toContain('套牌需要剛好 20 張（目前 30 張）');
+    expect(validateDeck(priest(filler.slice(0, 20))).ok).toBe(false);
+    expect(validateDeck(priest(filler)).ok).toBe(true);
+  });
+
+  it('自動組牌保留阿薩琳娜並遵守其張數限制', () => {
+    const cards = buildDeck('PRIEST', { seed: 7, noise: 0, bias: (c) => c.id === 'JAIL_430' ? 1000 : 0 });
+    expect(cards).toContain('JAIL_430');
+    expect(cards).toHaveLength(20);
+    expect(validateDeck(priest(cards)).ok).toBe(true);
+    expect(deckSize(cards.filter((id) => id !== 'JAIL_430'))).toBe(30);
   });
 });

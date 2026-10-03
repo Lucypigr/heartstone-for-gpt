@@ -3178,3 +3178,23 @@ textarea {
 .cost-kind.corpses {
   background: radial-gradient(circle at 35% 30%, #d8ff9a, #4d8a1c 65%);
 }
+
+
+.battle-location {
+  width: var(--mw, 100px);
+  min-height: 120px;
+  border: 2px solid #b89555;
+  border-radius: 14px 14px 4px 4px;
+  background: #292237;
+  color: #f4e5bf;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+}
+.battle-location img, .battle-location .art { width: 100%; height: 64px; object-fit: cover; }
+.battle-location span { font-size: 11px; }
+.battle-location.ready { border-color: #62db8b; box-shadow: 0 0 8px #62db8b88; }
+.battle-location:disabled { cursor: default; opacity: .8; }

@@ -32,6 +32,11 @@ const dieAtEndOfTurn: Ability = { on: { k: 'turnEnd', whose: 'mine' }, effects: 
 const PLAGUES = ['TTN_450t', 'TTN_450t2', 'TTN_450t3'];
 
 export const OVERRIDES: Record<string, Override> = {
+  JAIL_511: { locationEffects: [fn('spireOfSolitude')], tokens: ['JAIL_511t'] },
+  JAIL_877: { locationEffects: [{ e: 'summon', card: 'JAIL_877t', count: 1, who: 'self' }], tokens: ['JAIL_877t'] },
+  JAIL_887: { locationEffects: [fn('zuramatPrison')], tokens: ['JAIL_887t2', 'JAIL_887t3'] },
+  JAIL_887t2: { abilities: [{ on: { k: 'turnEnd', whose: 'mine' }, effects: [fn('zuramatReplay')] }] },
+  JAIL_987: { locationEffects: [fn('lowSecurityWing')] },
   // 紫羅蘭堡最後特殊卡：組牌規則／Rulebreaker
   CAP_405: { abilities: play(fn('godfatherKazakus')) },
   JAIL_397: { keywords: ['TAUNT'], startOfGame: [fn('beatrixStart')] },
@@ -42,7 +47,7 @@ export const OVERRIDES: Record<string, Override> = {
   JAIL_504t: { abilities: play({ e: 'mana', kind: 'temp', amount: 1 }, { e: 'summonJade' }) },
   JAIL_504t2: { abilities: play({ e: 'mana', kind: 'temp', amount: 1 }, fn('grimyCoin')) },
   JAIL_504t3: { abilities: play({ e: 'mana', kind: 'temp', amount: 1 }, fn('kabalCoinPotion')) },
-  JAIL_504t3p: { abilities: play(fn('randomKazakusPotion1')) },
+  JAIL_504t3p: { abilities: play(fn('randomKazakusPotion1')), tokens: ['CFM_621_m4'] },
   JAIL_831: { abilities: play(fn('kingUnderbelly')) },
 
   // 紫羅蘭堡最後特殊卡：對戰內規則
@@ -103,7 +108,7 @@ export const OVERRIDES: Record<string, Override> = {
   JAIL_101: { target: enemyMinion, abilities: play(fn('violetPunisher')) },
   JAIL_327: { abilities: play(fn('reinforcementAura')) },
   JAIL_330: { keywords: ['DIVINE_SHIELD', 'TAUNT'], extraStatsOnBuff: 1 },
-  JAIL_501: { target: anyChar, manaMirrorInHand: true, abilities: play(fn('picklockDamage')) },
+  JAIL_501: { target: enemyMinion, manaMirrorInHand: true, abilities: play(fn('picklockDamage')) },
   JAIL_118: { abilities: play(fn('destroyNonClassMinions', { class: 'PALADIN' })) },
   JAIL_123: {
     abilities: play({ e: 'discover', pool: { type: 'SPELL', minCost: 5 }, then: [fn('markItCastTwice')] }),
@@ -261,7 +266,6 @@ export const OVERRIDES: Record<string, Override> = {
     abilities: [{ on: { k: 'damaged', subject: 'friendlyMinion' }, cond: { c: 'itAlive' }, effects: [{ e: 'buff', target: { t: 'it' }, atk: 1 }] }],
   },
   JAIL_030: {
-    keywords: ['STEALTH'],
     abilities: [{ on: { k: 'attack', subject: 'self', after: true }, effects: [{ e: 'draw', count: 1, who: 'self' }, fn('escapeSelf')] }],
   },
   JAIL_122: { abilities: play(fn('grantSpellEchoSummon')) },
@@ -299,7 +303,8 @@ export const OVERRIDES: Record<string, Override> = {
       abilities: [{ on: { k: 'deathrattle' }, effects: [{ e: 'summonRandom', pool: { type: 'MINION', cost: 4 }, count: 2, who: 'self' }] }],
     }),
   },
-  JAIL_882: { abilities: [...play(fn('copyDeckSpells')), ...dr({ e: 'draw', count: 1, who: 'self' })] },
+  JAIL_882: { abilities: [...play(fn('copyDeckSpells')), ...dr(fn('drawCopiedDeckSpell'))] },
+  JAIL_866: { abilities: play(fn('lethalRecipe')) },
   JAIL_892: {
     target: anyChar,
     abilities: [
