@@ -138,6 +138,8 @@ export type DynAmount =
 export type Amount = number | { dyn: DynAmount; mult?: number; base?: number; race?: Race };
 
 export interface Pool {
+  /** Explicitly allows Discover results from any class. */
+  anyClass?: boolean;
   type?: CardType;
   race?: Race;
   cost?: number;
@@ -162,6 +164,7 @@ export interface Pool {
 }
 
 export type Condition =
+  | { c: 'controlLegendary' }
   | { c: 'holding'; race?: Race; type?: CardType }
   | { c: 'control'; race?: Race; keyword?: Keyword; min?: number }
   | { c: 'combo' }
@@ -205,6 +208,7 @@ export type Condition =
   | { c: 'not'; cond: Condition };
 
 export type Effect =
+  | { e: 'unlockOverload' }
   | { e: 'damage'; target: TargetExpr; amount: Amount; spell?: boolean }
   | { e: 'splitDamage'; filter: Filter; amount: Amount; spell?: boolean }
   | { e: 'heal'; target: TargetExpr; amount: Amount }

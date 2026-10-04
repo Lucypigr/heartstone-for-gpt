@@ -6,6 +6,10 @@ const env: ParseEnv = { findToken: (q) => `TOKEN:${q.name}:${q.atk ?? ''}/${q.hp
 const parse = (textEn: string, cardType: CardType = 'MINION') => parseCardText({ textEn, cardType }, env);
 
 describe('卡牌敘述解析', () => {
+  it('distinguishes explicit any-class and other-class generation', () => {
+    expect(parsePool('a 1-Cost spell from any class')).toMatchObject({ type: 'SPELL', cost: 1, anyClass: true });
+    expect(parsePool('a spell from another class')).toMatchObject({ type: 'SPELL', otherClass: true });
+  });
   it('戰吼造成傷害：可選目標', () => {
     const r = parse('<b>Battlecry:</b> Deal 3 damage.');
     expect(r.abilities[0].on).toEqual({ k: 'play' });

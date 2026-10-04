@@ -62,6 +62,18 @@ const RACE_WORDS: Record<string, number> = {
   undead: 11,
   naga: 92,
 };
+// Client RaceTagMap.xml, build 253932. These tags add a second visible race.
+const SECONDARY_RACES: Record<number, Race> = {
+  2522: 'PIRATE', 2523: 'DRAGON', 2525: 'DRAENEI', 2534: 'UNDEAD',
+  2536: 'MURLOC', 2537: 'DEMON', 2539: 'MECHANICAL', 2540: 'ELEMENTAL',
+  2542: 'BEAST', 2543: 'TOTEM', 2546: 'QUILBOAR', 2553: 'NAGA',
+};
+function racesOf(r: RawCard): Race[] {
+  return [...new Set([
+    RACE_MAP[r.tags.CARDRACE],
+    ...Object.entries(SECONDARY_RACES).filter(([tag]) => r.tags[tag]).map(([, race]) => race),
+  ].filter((race): race is Race => !!race))];
+}
 const SCHOOL_MAP: Record<number, string> = { 1: 'ARCANE', 2: 'FIRE', 3: 'FROST', 4: 'NATURE', 5: 'HOLY', 6: 'SHADOW', 7: 'FEL' };
 const KEYWORD_TAGS: [string, Keyword][] = [
   ['TAUNT', 'TAUNT'],
@@ -295,8 +307,8 @@ async function main() {
       def.attack = r.tags.ATK ?? 0;
       def.health = r.tags.HEALTH ?? r.tags.DURABILITY ?? 1;
     }
-    const race = RACE_MAP[r.tags.CARDRACE];
-    if (race) def.races = [race];
+    const races = racesOf(r);
+    if (races.length) def.races = races;
     const school = SCHOOL_MAP[r.tags.SPELL_SCHOOL];
     if (school) def.spellSchool = school;
     if (r.tags.MULTIPLE_CLASSES) {

@@ -59,7 +59,12 @@ export function parseCardDefs(xml: string): RawCard[] {
     while ((t = tagRe.exec(body))) {
       const name = t[3] || t[2];
       if (t[4] === 'Card' && t[1]) card.refs[name] = t[1];
-      if (t[4] !== 'String' && t[4] !== 'LocString') card.tags[name] = Number(t[5]);
+      if (t[4] !== 'String' && t[4] !== 'LocString') {
+        card.tags[name] = Number(t[5]);
+        // Some secondary-race tags have the same placeholder name="1".
+        // Preserve enum IDs so distinct tags cannot overwrite each other.
+        card.tags[t[2]] = Number(t[5]);
+      }
     }
     cards.push(card);
   }

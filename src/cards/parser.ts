@@ -250,7 +250,7 @@ const TARGET_RULES: TargetRule[] = [
   [/^(?:the enemy hero|your opponent's hero|the opposing hero|your opponent)(?![a-z'])/, () => ({ exprs: [{ t: 'hero', side: 'enemy' }] })],
   [/^(?:each hero|both heroes)/, () => ({ exprs: [{ t: 'hero', side: 'both' }] })],
   // --- 自己 / 它 ---
-  [/^(?:this minion|itself|this character)/, () => ({ exprs: [{ t: 'self' }] })],
+  [/^(?:this minion|itself|this character|this)(?![a-z])/, () => ({ exprs: [{ t: 'self' }] })],
   [/^them(?![a-z'])/, (_m, ctx) => ({ exprs: ctx.lastExprs && !ctx.lastWasSummon ? ctx.lastExprs : [itRef(ctx)] })],
   [/^(?:it|that minion|that character)(?![a-z'])/, (_m, ctx) => ({ exprs: [itRef(ctx)] })],
   // --- 選擇目標（含相鄰） ---
@@ -465,7 +465,11 @@ export function parsePool(phrase: string): Pool | null {
     pool.cls = 'own';
     s = s.slice(m[0].length).trim();
   } else if ((m = /^from another class/.exec(s))) {
-    return null;
+    pool.otherClass = true;
+    s = s.slice(m[0].length).trim();
+  } else if ((m = /^from any class/.exec(s))) {
+    pool.anyClass = true;
+    s = s.slice(m[0].length).trim();
   }
   if ((m = /^with (Taunt|Deathrattle|Rush|Divine Shield|Lifesteal|Battlecry)/.exec(s))) {
     if (m[1] === 'Deathrattle') pool.hasDeathrattle = true;
@@ -1215,6 +1219,7 @@ function parseActions(body: string, ctx: Ctx): Effect[] {
 // ---------------------------------------------------------------------------
 
 const CONDITIONS: [RegExp, (m: RegExpExecArray) => Condition][] = [
+  [/^this is at full Health/, () => ({ c: 'not', cond: { c: 'damaged' } })],
   [new RegExp(`^you're holding an? (${RACE_RE})`), (m) => ({ c: 'holding', race: race(m[1]) })],
   [/^you're holding a spell/, () => ({ c: 'holding', type: 'SPELL' })],
   [new RegExp(`^you control (?:an?|another) (${RACE_RE})`), (m) => ({ c: 'control', race: race(m[1]) })],
