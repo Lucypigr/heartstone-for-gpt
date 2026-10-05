@@ -138,6 +138,8 @@ export type DynAmount =
 export type Amount = number | { dyn: DynAmount; mult?: number; base?: number; race?: Race };
 
 export interface Pool {
+  /** Explicit Colossal-only effects bypass ordinary random-generation exclusion. */
+  colossal?: boolean;
   /** Explicitly allows Discover results from any class. */
   anyClass?: boolean;
   type?: CardType;
@@ -408,6 +410,8 @@ export interface Runes {
 }
 
 export interface CardDef {
+  /** Ordered appendages on each side of a Colossal body, generated on summon. */
+  colossal?: { left: string[]; right: string[] };
   id: string;
   dbfId: number;
   name: string;

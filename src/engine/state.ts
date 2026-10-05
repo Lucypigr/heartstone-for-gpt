@@ -82,6 +82,8 @@ export interface Location {
 }
 
 export interface Minion {
+  /** Summon-time processing guard; never inherited by a new copy. */
+  colossalProcessed?: boolean;
   uid: number;
   cardId: string;
   owner: PlayerId;

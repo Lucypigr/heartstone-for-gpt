@@ -32,6 +32,13 @@ const dieAtEndOfTurn: Ability = { on: { k: 'turnEnd', whose: 'mine' }, effects: 
 const PLAGUES = ['TTN_450t', 'TTN_450t2', 'TTN_450t3'];
 
 export const OVERRIDES: Record<string, Override> = {
+  CATA_488: {
+    colossal: { left: ['CATA_488t'], right: ['CATA_488t2'] },
+    tokens: ['CATA_488t', 'CATA_488t2'],
+    abilities: [{ on: { k: 'turnEnd', whose: 'mine' }, effects: [{ e: 'damage', target: { t: 'all', filter: { type: 'minion', side: 'any', excludeSelf: true } }, amount: 3 }] }],
+  },
+  CATA_488t: { abilities: [{ on: { k: 'damaged', subject: 'self' }, effects: [fn('plumeOfVulcanos')] }] },
+  CATA_488t2: { abilities: [{ on: { k: 'damaged', subject: 'self' }, effects: [fn('plumeOfVulcanos')] }] },
   CATA_136: { abilities: play(fn('shuffleDoubledExpensiveMinions')) },
   CATA_308: { costIf: { cond: { c: 'controlLegendary' }, cost: 1 }, abilities: play({ e: 'damage', target: { t: 'all', filter: { type: 'minion', side: 'any' } }, amount: 4, spell: true }) },
   CATA_472: { abilities: dr(fn('triggerRandomEndOfTurn')) },

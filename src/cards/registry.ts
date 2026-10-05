@@ -78,6 +78,7 @@ export function cardClasses(c: CardDef): CardClass[] {
 /** 依卡池條件篩選可收藏卡（發現 / 隨機產生卡牌用） */
 export function poolCards(pool: Pool, ownClass: CardClass, oppClass: CardClass): CardDef[] {
   return COLLECTIBLE.filter((c) => {
+    if (pool.colossal && !c.colossal) return false;
     if (pool.type && c.type !== pool.type) return false;
     if (pool.race && !(c.races?.includes(pool.race) || c.races?.includes('ALL'))) return false;
     if (pool.cost !== undefined && c.cost !== pool.cost) return false;

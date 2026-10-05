@@ -1266,6 +1266,7 @@ export class Game {
       this.countSummon(boardPlayer, m.cardId);
       this.assemble(boardPlayer, m);
       this.fx({ kind: 'summon', uid: m.uid, cardId: m.cardId, player: boardOwner, played: true });
+      yield* this.summonColossalParts(m);
       if (def.races?.includes('ELEMENTAL')) boardPlayer.elementalThisTurn = true;
       p.minionsPlayedThisTurn = (p.minionsPlayedThisTurn ?? 0) + 1;
       p.minionsPlayedThisGame = (p.minionsPlayedThisGame ?? 0) + 1;
@@ -1973,10 +1974,11 @@ export class Game {
   }
 
   /** 召喚手下（非從手牌打出） */
-  private *summon(owner: PlayerId, cardId: string, position?: number, sourceCard?: HandCard): Gen<Minion | null> {
+  private *summon(owner: PlayerId, cardId: string, position?: number, sourceCard?: HandCard, copyOf?: Minion): Gen<Minion | null> {
     const p = this.s.players[owner];
     if (this.boardSpaceUsed(p.id) >= MAX_BOARD) return null;
     const m = this.makeMinion(owner, cardId, sourceCard);
+    if (copyOf) this.copyStats(copyOf, m);
     const pos = position === undefined ? p.board.length : Math.max(0, Math.min(position, p.board.length));
     p.board.splice(pos, 0, m);
     this.recalcAuras();
@@ -1985,6 +1987,26 @@ export class Game {
     this.fx({ kind: 'summon', uid: m.uid, cardId, player: owner });
     yield* this.emit({ k: 'summon', player: owner, subject: m.uid, races: getCard(cardId).races, cardId });
     return m;
+  }
+
+  private *summonColossalParts(body: Minion): Gen {
+    if (body.colossalProcessed) return;
+    body.colossalProcessed = true;
+    const parts = getCard(body.cardId).colossal;
+    if (!parts || body.silenced || !this.alive(body)) return;
+    const player = this.s.players[body.owner];
+    for (const cardId of parts.left) {
+      const index = player.board.indexOf(body);
+      if (index < 0 || this.boardSpaceUsed(body.owner) >= MAX_BOARD) return;
+      yield* this.summon(body.owner, cardId, index);
+    }
+    let rightOffset = 1;
+    for (const cardId of parts.right) {
+      const index = player.board.indexOf(body);
+      if (index < 0 || this.boardSpaceUsed(body.owner) >= MAX_BOARD) return;
+      const part = yield* this.summon(body.owner, cardId, index + rightOffset);
+      if (part) rightOffset++;
+    }
   }
 
   // ==========================================================================
@@ -2304,6 +2326,10 @@ export class Game {
     if (this.over || this.emitDepth > 40 || ++this.steps > 4000) return;
     this.emitDepth++;
     try {
+      if (ev.k === 'summon' && ev.subject !== undefined) {
+        const body = this.minion(ev.subject);
+        if (body) yield* this.summonColossalParts(body);
+      }
       const order: PlayerId[] = [this.s.current, opp(this.s.current)];
       const holders: { kind: 'minion' | 'weapon'; uid: number; owner: PlayerId }[] = [];
       for (const pid of order) {
@@ -2319,7 +2345,10 @@ export class Game {
         let ent: Minion | Weapon | null;
         if (h.kind === 'minion') {
           const m = this.minion(h.uid);
-          if (!m || m.hp <= 0 || m.dead || (m.dormantTurns ?? 0) > 0) continue;
+          if (!m || (m.dormantTurns ?? 0) > 0) continue;
+          // Taking lethal damage still triggers "whenever this takes damage".
+          // "Survives damage" abilities separately check itAlive.
+          if ((m.hp <= 0 || m.dead) && !(ev.k === 'damaged' && ev.subject === m.uid)) continue;
           ent = m;
           abilities = m.abilities;
         } else {
@@ -2757,7 +2786,7 @@ export class Game {
 
   private randomPool(pool: Pool, pid: PlayerId, classRestrict: boolean): CardDef[] {
     const own = this.s.players[pid].heroClass;
-    let cards = poolCards(pool, own, this.s.players[opp(pid)].heroClass);
+    let cards = poolCards(pool, own, this.s.players[opp(pid)].heroClass).filter((c) => pool.colossal || !c.colossal);
     if (classRestrict && !pool.cls && !pool.otherClass && !pool.anyClass) {
       cards = cards.filter((c) => c.cardClass === 'NEUTRAL' || cardClasses(c).includes(own));
     }
@@ -2775,9 +2804,9 @@ export class Game {
     return undefined;
   }
 
-  private *doSummon(ctx: Ctx, who: PlayerId, cardId: string): Gen<Minion | null> {
+  private *doSummon(ctx: Ctx, who: PlayerId, cardId: string, copyOf?: Minion): Gen<Minion | null> {
     const pos = this.summonPos(ctx, who);
-    const m = yield* this.summon(who, cardId, pos);
+    const m = yield* this.summon(who, cardId, pos, undefined, copyOf);
     if (m) {
       if (ctx.position !== undefined && who === ctx.controller) ctx.position++;
       ctx.it = { kind: 'char', uid: m.uid };
@@ -2946,8 +2975,7 @@ export class Game {
         if (!sources.length && e.target.t === 'self' && ctx.sourceSnapshot) sources.push(ctx.sourceSnapshot);
         for (const src of sources) {
           for (let i = 0; i < e.count; i++) {
-            const m = yield* this.doSummon(ctx, ctx.controller, src.cardId);
-            if (m) this.copyStats(src, m);
+            yield* this.doSummon(ctx, ctx.controller, src.cardId, src);
           }
         }
         break;
@@ -3387,6 +3415,14 @@ export class Game {
     const me = s.players[ctx.controller];
     const foe = s.players[opp(ctx.controller)];
     switch (fn) {
+      case 'plumeOfVulcanos': {
+        const card = pick(s, this.randomPool({ type: 'SPELL', spellSchool: 'FIRE' }, me.id, false));
+        if (card) {
+          const hand = this.addToHand(me, card.id);
+          if (hand) hand.costMod -= 3;
+        }
+        break;
+      }
       case 'shuffleDoubledExpensiveMinions': {
         const pool = this.randomPool({ type: 'MINION', minCost: 8 }, me.id, false);
         for (let i = 0; i < 5; i++) {
@@ -3754,8 +3790,7 @@ export class Game {
         const target = this.minion(ctx.chosen);
         if (!target) break;
         if (this.hasKw(target, 'REBORN')) {
-          const copy = yield* this.summon(ctx.controller, target.cardId);
-          if (copy) this.copyStats(target, copy);
+          yield* this.summon(ctx.controller, target.cardId, undefined, undefined, target);
         } else target.keywords.push('REBORN');
         break;
       }
